@@ -1,4 +1,5 @@
 """Redis cache layer for frequently accessed data."""
+import json
 import os
 import time
 from typing import Optional, Any, List, Dict
@@ -16,18 +17,41 @@ def get_redis() -> redis.Redis:
     return _redis
 
 
+def _serialize_value(value: Any) -> str:
+    """Automatically serialize lists/dicts to JSON strings for Redis storage.
+    
+    Redis cannot store Python lists/dicts directly - they must be strings.
+    Other types (str, int, float, bool) are returned as-is.
+    """
+    if isinstance(value, (list, dict)):
+        return json.dumps(value)
+    return str(value)
+
+
 def cache_get(key: str, namespace: str = "pos") -> Optional[Any]:
     """Get a value from the cache. Returns None if not found."""
     r = get_redis()
     full_key = f"pos:{namespace}:{key}"
-    return r.get(full_key)
+    raw = r.get(full_key)
+    if raw is None:
+        return None
+    # Try to deserialize JSON back to list/dict
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return raw
 
 
 def cache_set(key: str, value: Any, ttl: int = 300, namespace: str = "pos") -> None:
-    """Set a value in the cache with optional TTL (seconds)."""
+    """Set a value in the cache with optional TTL (seconds).
+    
+    Automatically serializes lists/dicts to JSON strings since Redis
+    cannot store Python collections directly.
+    """
     r = get_redis()
     full_key = f"pos:{namespace}:{key}"
-    r.setex(full_key, ttl, value)
+    serialized = _serialize_value(value)
+    r.setex(full_key, ttl, serialized)
 
 
 def cache_del(key: str, namespace: str = "pos") -> None:
