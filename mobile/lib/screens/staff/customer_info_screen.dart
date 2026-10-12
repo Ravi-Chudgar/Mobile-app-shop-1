@@ -101,8 +101,9 @@ class _CustomerInfoScreenState extends State<CustomerInfoScreen> {
                         prefixIcon: Icon(Icons.person_outline),
                       ),
                       textInputAction: TextInputAction.next,
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'Name is required' : null,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Name is required'
+                          : null,
                       autofocus: true,
                     ),
                     const SizedBox(height: 16),

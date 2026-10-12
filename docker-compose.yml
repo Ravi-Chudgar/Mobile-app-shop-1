@@ -2,7 +2,7 @@
 # Cloudflare tunnel for demos beyond the LAN.
 #
 #   cp .env.example .env           # optional — defaults work without it
-#   docker compose up -d --build   # API on http://localhost:5000
+#   docker compose up -d --build   # API on http://localhost:9999
 #   docker compose logs -f backend # first boot prints the seed logins
 #
 # Public demo URL (random trycloudflare.com address):
@@ -61,8 +61,18 @@ services:
       SEED_ADMIN_USER: ${SEED_ADMIN_USER:-owner}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-cafe123}
       SEED_ON_START: ${SEED_ON_START:-1}
+      # Thermal printer (raw ESC/POS over TCP, usually port 9100).
+      # Empty host = dry-run mode (returns bytes, prints nothing).
+      ESCPOS_PRINTER_HOST: ${ESCPOS_PRINTER_HOST:-}
+      ESCPOS_PRINTER_PORT: ${ESCPOS_PRINTER_PORT:-9100}
+      AUTO_PRINT_KOT: ${AUTO_PRINT_KOT:-0}
+      # Flutter web release build served by the API so any public URL
+      # (tunnel/LAN) loads the actual app UI (see app/routes/webapp.py).
+      WEB_DIST: /srv/web
     ports:
-      - "${BACKEND_PORT:-5000}:5000"
+      - "${BACKEND_PORT:-9999}:9999"
+    volumes:
+      - ./mobile/build/web:/srv/web:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -75,13 +85,13 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-    command: ["tunnel", "--no-autoupdate", "--url", "http://backend:5000"]
+    command: ["tunnel", "--no-autoupdate", "--url", "http://backend:9999"]
 
   # Stable named tunnel — STATIC URL that never changes.
   # Setup:
   # 1. Go to https://one.dash.cloudflare.com/ → Networks → Tunnels
   # 2. Create a tunnel, add public hostname:
-  #    mobileapp.unonomercysound.online → http://backend:5000
+  #    mobileapp.unonomercysound.online → http://backend:9999
   # 3. Copy the tunnel token to TUNNEL_TOKEN in .env
   # 4. Run: docker compose --profile tunnel-token up -d named-tunnel
   # 5. Mobile app API base URL: https://mobileapp.unonomercysound.online
@@ -93,6 +103,12 @@ services:
       - backend
     command: ["tunnel", "--no-autoupdate", "run", "--token",
               "${TUNNEL_TOKEN:-}"]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
 
 volumes:
   floci-data:

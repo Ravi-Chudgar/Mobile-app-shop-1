@@ -3,15 +3,19 @@ import 'package:provider/provider.dart';
 
 import '../../state/auth_state.dart';
 import '../../widgets/shell_app_bar.dart';
+import '../../widgets/ui_kit.dart';
 import '../admin/dashboard_screen.dart';
 import '../admin/inventory_screen.dart';
 import '../staff/ask_screen.dart';
 import '../admin/menu_editor_screen.dart';
 import '../admin/orders_queue_screen.dart';
 import 'billing_screen.dart';
+import 'exports_screen.dart';
+import 'printer_settings_screen.dart';
 import 'reports_screen.dart';
 import 'staff_screen.dart';
 import 'tables_admin_screen.dart';
+import 'growth_screen.dart';
 import 'vendor_message_screen.dart';
 
 /// Owner container with bottom navigation:
@@ -58,19 +62,40 @@ class _OwnerShellState extends State<OwnerShell> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: const Color(0xFFEDE4DA),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
             const Padding(
-              padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: Row(
                 children: [
-                  Text(
-                    'More',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                  IconChip(
+                    icon: Icons.more_horiz_rounded,
+                    gradient: CafeGradients.coffee,
+                    size: 40,
+                    iconSize: 20,
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'More',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'Reports, growth, exports & team',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF8A6A52),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -90,7 +115,49 @@ class _OwnerShellState extends State<OwnerShell> {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const ReportsScreen()),
+                        MaterialPageRoute(
+                            builder: (_) => const ReportsScreen()),
+                      );
+                    },
+                  ),
+                  _MoreTile(
+                    icon: Icons.trending_up_outlined,
+                    selectedIcon: Icons.trending_up,
+                    title: 'Growth',
+                    subtitle: 'Loyalty, delivery orders & table QRs',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const GrowthScreen()),
+                      );
+                    },
+                  ),
+                  _MoreTile(
+                    icon: Icons.file_upload_outlined,
+                    selectedIcon: Icons.file_upload,
+                    title: 'Exports',
+                    subtitle: 'Tally XML/CSV & GSTR-1/GSTR-3B',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const ExportsScreen()),
+                      );
+                    },
+                  ),
+                  _MoreTile(
+                    icon: Icons.print_outlined,
+                    selectedIcon: Icons.print,
+                    title: 'Printers',
+                    subtitle: 'Network · USB · Bluetooth',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const PrinterSettingsScreen()),
                       );
                     },
                   ),
@@ -116,7 +183,8 @@ class _OwnerShellState extends State<OwnerShell> {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const MenuEditorScreen()),
+                        MaterialPageRoute(
+                            builder: (_) => const MenuEditorScreen()),
                       );
                     },
                   ),
@@ -129,7 +197,8 @@ class _OwnerShellState extends State<OwnerShell> {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const InventoryScreen()),
+                        MaterialPageRoute(
+                            builder: (_) => const InventoryScreen()),
                       );
                     },
                   ),
@@ -149,10 +218,11 @@ class _OwnerShellState extends State<OwnerShell> {
     return Scaffold(
       appBar: ShellAppBar(
         title: _titles[_index],
+        subtitle: shellDateLabel(),
         userName: name,
         onLogout: () => context.read<AuthState>().logout(),
-        onAsk: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const AskScreen())),
+        onAsk: () => Navigator.of(context)
+            .push(MaterialPageRoute(builder: (_) => const AskScreen())),
         actions: [
           IconButton(
             icon: const Icon(Icons.more_horiz),
@@ -214,15 +284,42 @@ class _MoreTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: ListTile(
-        leading: Icon(icon, size: 24),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
-        trailing: const Icon(Icons.chevron_right, size: 20),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
         onTap: onTap,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              IconChip(
+                icon: icon,
+                gradient: CafeGradients.forSeed(title),
+                size: 40,
+                iconSize: 19,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: text.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w700)),
+                    Text(subtitle,
+                        style: text.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 20),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -139,6 +139,7 @@ class _VendorMessageScreenState extends State<VendorMessageScreen> {
     );
 
     if (confirm != true) return;
+    if (!mounted) return;
 
     final api = context.read<ApiClient>();
     int success = 0;
@@ -315,7 +316,8 @@ class _VendorHeader extends StatelessWidget {
                   color: scheme.primary.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(Icons.storefront_rounded, color: scheme.primary, size: 24),
+                child: Icon(Icons.storefront_rounded,
+                    color: scheme.primary, size: 24),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -342,7 +344,8 @@ class _VendorHeader extends StatelessWidget {
               ),
               if (lowStockCount > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.orange,
                     borderRadius: BorderRadius.circular(12),
@@ -370,7 +373,8 @@ class _VendorHeader extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide.none,
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               isDense: true,
             ),
           ),
@@ -409,7 +413,8 @@ class _SelectedBar extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.shopping_cart_rounded, color: Colors.green.shade700, size: 20),
+              Icon(Icons.shopping_cart_rounded,
+                  color: Colors.green.shade700, size: 20),
               const SizedBox(width: 8),
               Text(
                 '$count items · $totalQty units',
@@ -426,7 +431,8 @@ class _SelectedBar extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   minimumSize: Size.zero,
                 ),
-                child: Text('Clear', style: TextStyle(fontSize: 12, color: Colors.red.shade400)),
+                child: Text('Clear',
+                    style: TextStyle(fontSize: 12, color: Colors.red.shade400)),
               ),
             ],
           ),
@@ -441,7 +447,8 @@ class _SelectedBar extends StatelessWidget {
                   style: FilledButton.styleFrom(
                     backgroundColor: Colors.green,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    textStyle: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
@@ -453,7 +460,8 @@ class _SelectedBar extends StatelessWidget {
                   label: const Text('Mark Received'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    textStyle: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
@@ -589,24 +597,32 @@ class _ItemTile extends StatelessWidget {
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: isLow ? Colors.orange.shade100 : Colors.grey.shade100,
+                                color: isLow
+                                    ? Colors.orange.shade100
+                                    : Colors.grey.shade100,
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
                                 '${item.quantity} ${item.unit}',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: isLow ? Colors.orange.shade800 : Colors.grey.shade700,
-                                  fontWeight: isLow ? FontWeight.w600 : FontWeight.normal,
+                                  color: isLow
+                                      ? Colors.orange.shade800
+                                      : Colors.grey.shade700,
+                                  fontWeight: isLow
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
                                 ),
                               ),
                             ),
                             if (isLow) ...[
                               const SizedBox(width: 6),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.red.shade100,
                                   borderRadius: BorderRadius.circular(6),

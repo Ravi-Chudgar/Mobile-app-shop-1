@@ -33,7 +33,7 @@ class NotificationService {
 
       final staffPart = takenBy != null ? ' for $takenBy' : '';
       final body = customerName.isNotEmpty
-          ? '${customerName}\'s order is ready$staffPart.'
+          ? '$customerName\'s order is ready$staffPart.'
           : 'Order #$orderId is ready$staffPart.';
 
       const details = NotificationDetails(

@@ -69,8 +69,7 @@ class _OrdersQueueScreenState extends State<OrdersQueueScreen> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
@@ -104,6 +103,7 @@ class _OrdersQueueScreenState extends State<OrdersQueueScreen> {
     if (confirmed != true || !mounted) return;
     try {
       await context.read<ApiClient>().reopenOrder(order.id);
+      if (!mounted) return;
       context.read<CartState>().tablesChanged();
       await _load();
       if (!mounted) return;
@@ -119,8 +119,7 @@ class _OrdersQueueScreenState extends State<OrdersQueueScreen> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
@@ -146,8 +145,7 @@ class _OrdersQueueScreenState extends State<OrdersQueueScreen> {
       await _load();
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(
-          content: Text(
-              'Added ${added.length} item(s) to Order #${order.id} • '
+          content: Text('Added ${added.length} item(s) to Order #${order.id} • '
               'new total ${formatMoney(updated.total)}')));
     } catch (e) {
       if (!mounted) return;
@@ -319,186 +317,188 @@ class _OrderCard extends StatelessWidget {
           );
         },
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header ──
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            color: statusColor.withValues(alpha: 0.08),
-            child: Row(
-              children: [
-                Text('#${o.id}',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 15)),
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: statusColor,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(o.status,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Header ──
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              color: statusColor.withValues(alpha: 0.08),
+              child: Row(
+                children: [
+                  Text('#${o.id}',
                       style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600)),
-                ),
-                if (o.tableNumber != null) ...[
-                  const SizedBox(width: 6),
+                          fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(width: 8),
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: Colors.orange.shade100,
+                      color: statusColor,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text('T${o.tableNumber}',
-                        style: TextStyle(
+                    child: Text(o.status,
+                        style: const TextStyle(
+                            color: Colors.white,
                             fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.orange.shade800)),
+                            fontWeight: FontWeight.w600)),
                   ),
-                ],
-                const Spacer(),
-                Text(formatMoney(o.total),
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 15)),
-              ],
-            ),
-          ),
-
-          // ── Customer + phone + staff ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-            child: Row(
-              children: [
-                Icon(Icons.person_outline,
-                    size: 14, color: scheme.onSurfaceVariant),
-                const SizedBox(width: 4),
-                Text(o.customerName,
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w500)),
-                if (o.customerPhone != null && o.customerPhone!.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  Icon(Icons.phone_outlined,
-                      size: 12, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 3),
-                  Text(o.customerPhone!,
-                      style: TextStyle(
-                          fontSize: 12, color: scheme.onSurfaceVariant)),
-                ],
-                if (o.takenBy != null && o.takenBy!.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  Icon(Icons.storefront_outlined,
-                      size: 12, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 3),
-                  Text(o.takenBy!,
-                      style: TextStyle(
-                          fontSize: 12, color: scheme.onSurfaceVariant)),
-                ],
-              ],
-            ),
-          ),
-
-          // ── Items ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final line in o.items)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Row(
-                      children: [
-                        Text('${line.qty}×',
-                            style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: scheme.onSurfaceVariant)),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            '${line.name}'
-                            '${line.options.isEmpty ? '' : ' (${line.options.join(', ')})'}',
-                            style: TextStyle(
-                                fontSize: 13, color: scheme.onSurfaceVariant),
-                          ),
-                        ),
-                        Text(formatMoney(line.lineTotal),
-                            style: TextStyle(
-                                fontSize: 12, color: scheme.onSurfaceVariant)),
-                      ],
+                  if (o.tableNumber != null) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text('T${o.tableNumber}',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.orange.shade800)),
                     ),
-                  ),
-              ],
-            ),
-          ),
-
-          // ── Notes ──
-          if (o.notes.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  o.notes,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                    color: Colors.amber.shade900,
-                  ),
-                ),
+                  ],
+                  const Spacer(),
+                  Text(formatMoney(o.total),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15)),
+                ],
               ),
             ),
 
-          // ── Actions ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (canEdit)
-                  OutlinedButton.icon(
-                    onPressed: onAddItem,
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add'),
-                    style: OutlinedButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
+            // ── Customer + phone + staff ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+              child: Row(
+                children: [
+                  Icon(Icons.person_outline,
+                      size: 14, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 4),
+                  Text(o.customerName,
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w500)),
+                  if (o.customerPhone != null &&
+                      o.customerPhone!.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Icon(Icons.phone_outlined,
+                        size: 12, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 3),
+                    Text(o.customerPhone!,
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                  ],
+                  if (o.takenBy != null && o.takenBy!.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Icon(Icons.storefront_outlined,
+                        size: 12, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 3),
+                    Text(o.takenBy!,
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                  ],
+                ],
+              ),
+            ),
+
+            // ── Items ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final line in o.items)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Row(
+                        children: [
+                          Text('${line.qty}×',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: scheme.onSurfaceVariant)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '${line.name}'
+                              '${line.options.isEmpty ? '' : ' (${line.options.join(', ')})'}',
+                              style: TextStyle(
+                                  fontSize: 13, color: scheme.onSurfaceVariant),
+                            ),
+                          ),
+                          Text(formatMoney(line.lineTotal),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // ── Notes ──
+            if (o.notes.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    o.notes,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.amber.shade900,
                     ),
                   ),
-                if (canEdit && canAdvance) const SizedBox(width: 8),
-                if (canAdvance)
-                  o.status == 'ready'
-                      ? FilledButton.icon(
-                          onPressed: onAdvance,
-                          icon: const Icon(Icons.shopping_bag, size: 16),
-                          label: Text(nextLabel!),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        )
-                      : FilledButton.tonal(
-                          onPressed: onAdvance,
-                          child: Text(nextLabel!),
-                        )
-                else if (canEdit && o.status == 'collected')
-                  FilledButton.tonal(
-                    onPressed: onReopen,
-                    child: const Text('Reopen'),
-                  ),
-              ],
+                ),
+              ),
+
+            // ── Actions ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (canEdit)
+                    OutlinedButton.icon(
+                      onPressed: onAddItem,
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Add'),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  if (canEdit && canAdvance) const SizedBox(width: 8),
+                  if (canAdvance)
+                    o.status == 'ready'
+                        ? FilledButton.icon(
+                            onPressed: onAdvance,
+                            icon: const Icon(Icons.shopping_bag, size: 16),
+                            label: Text(nextLabel!),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          )
+                        : FilledButton.tonal(
+                            onPressed: onAdvance,
+                            child: Text(nextLabel!),
+                          )
+                  else if (canEdit && o.status == 'collected')
+                    FilledButton.tonal(
+                      onPressed: onReopen,
+                      child: const Text('Reopen'),
+                    ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }

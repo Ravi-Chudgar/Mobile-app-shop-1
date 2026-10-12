@@ -33,10 +33,11 @@ class _StaffShellState extends State<StaffShell> {
     return Scaffold(
       appBar: ShellAppBar(
         title: _titles[_index],
+        subtitle: shellDateLabel(),
         userName: name,
         onLogout: () => context.read<AuthState>().logout(),
-        onAsk: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const AskScreen())),
+        onAsk: () => Navigator.of(context)
+            .push(MaterialPageRoute(builder: (_) => const AskScreen())),
       ),
       body: IndexedStack(index: _index, children: _pages),
       bottomNavigationBar: NavigationBar(

@@ -101,8 +101,7 @@ class _AskScreenState extends State<AskScreen> {
     if (confirmed != true || !mounted) return;
 
     // Record the decision in the transcript either way.
-    setState(() => _turns.add(_Turn(
-        question: action.label, isNote: true)));
+    setState(() => _turns.add(_Turn(question: action.label, isNote: true)));
     _bump();
     try {
       final result = await api.executeAction(action.action, action.args);
@@ -112,11 +111,11 @@ class _AskScreenState extends State<AskScreen> {
           answer: '✓ ${result['status'] ?? result['number'] ?? 'completed'}',
           isNote: true)));
       _bump();
-      messenger.showSnackBar(
-          SnackBar(content: Text('${action.label} — done')));
+      messenger.showSnackBar(SnackBar(content: Text('${action.label} — done')));
     } catch (e) {
       if (!mounted) return;
-      setState(() => _turns.add(_Turn(question: 'Failed', answer: '$e', isNote: true)));
+      setState(() =>
+          _turns.add(_Turn(question: 'Failed', answer: '$e', isNote: true)));
       _bump();
       messenger.showSnackBar(SnackBar(content: Text('$e')));
     }
@@ -132,8 +131,7 @@ class _AskScreenState extends State<AskScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
         _scroll.animateTo(_scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut);
+            duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
       }
     });
   }
@@ -173,8 +171,7 @@ class _AskScreenState extends State<AskScreen> {
                         ? const SizedBox(
                             width: 18,
                             height: 18,
-                            child:
-                                CircularProgressIndicator(strokeWidth: 2))
+                            child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.send_rounded),
                   ),
                 ],
@@ -250,13 +247,13 @@ class _AskScreenState extends State<AskScreen> {
             alignment: Alignment.center,
             child: Container(
               margin: const EdgeInsets.symmetric(vertical: 4),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Text('${turn.question}${turn.answer == null ? '' : ' • ${turn.answer}'}',
+              child: Text(
+                  '${turn.question}${turn.answer == null ? '' : ' • ${turn.answer}'}',
                   style: Theme.of(context).textTheme.bodySmall),
             ),
           );

@@ -1,10 +1,13 @@
 """Flask application factory."""
+import importlib
 import os
+import pkgutil
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, make_response
 
 from .util import ApiError
+from .cache import cache_get, cache_set, cache_exists
 
 load_dotenv()  # load backend/.env if present
 
@@ -12,25 +15,30 @@ load_dotenv()  # load backend/.env if present
 # tokens, not cookies). Set CORS_ORIGINS to a comma-separated list in prod.
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 
+# Redis cache initialization — optional; no-code failure if Redis is unavailable.
+try:
+    from .cache import get_redis as _init_redis  # type: ignore
+    _redis = _init_redis()
+    CACHE_AVAILABLE = True
+except Exception:  # pragma: no cover
+    CACHE_AVAILABLE = False
+
 
 def create_app():
     app = Flask(__name__)
 
-    from .routes.menu import bp as menu_bp
-    from .routes.orders import bp as orders_bp
-    from .routes.admin import bp as admin_bp
-    from .routes.auth import bp as auth_bp
-    from .routes.tables import bp as tables_bp
-    from .routes.recommend import bp as recommend_bp
-    from .routes.ask import bp as ask_bp
+    # Auto-register every blueprint in app/routes/*: each module exposes a
+    # module-level `bp`. Adding a new route file needs no edit here, which
+    # keeps parallel feature work conflict-free.
+    from . import routes as routes_pkg
 
-    app.register_blueprint(menu_bp)
-    app.register_blueprint(orders_bp)
-    app.register_blueprint(admin_bp)
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(tables_bp)
-    app.register_blueprint(recommend_bp)
-    app.register_blueprint(ask_bp)
+    for mod in pkgutil.iter_modules(routes_pkg.__path__):
+        if mod.name.startswith("_"):
+            continue
+        module = importlib.import_module(f".routes.{mod.name}", __name__)
+        bp = getattr(module, "bp", None)
+        if bp is not None:
+            app.register_blueprint(bp)
 
     # ---- CORS: let the Flutter web build (and any browser) call the API ----
     @app.after_request

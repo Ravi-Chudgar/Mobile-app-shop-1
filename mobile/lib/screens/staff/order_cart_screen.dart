@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../services/api_client.dart';
+import '../../services/offline/offline.dart';
 import '../../state/cart_state.dart';
 import '../../util/money.dart';
-import '../../widgets/collect_payment_dialog.dart' show paymentMethods;
 import '../../widgets/menu_picker_sheet.dart';
 import '../../widgets/recommendations_strip.dart';
 
@@ -27,7 +27,6 @@ class OrderCartScreen extends StatefulWidget {
 class _OrderCartScreenState extends State<OrderCartScreen> {
   final _notes = TextEditingController();
   bool _submitting = false;
-  String _paymentMethod = 'cash';
 
   bool get _isAddMode => widget.existingOrderId != null;
 
@@ -43,10 +42,14 @@ class _OrderCartScreenState extends State<OrderCartScreen> {
     setState(() => _submitting = true);
     final api = context.read<ApiClient>();
     final messenger = ScaffoldMessenger.of(context);
+    final payload = cart.buildOrderPayload(
+      tableNumber: widget.tableNumber,
+      notes: _notes.text.trim(),
+    );
     try {
       if (_isAddMode) {
-        final order = await api.addOrderItems(
-            widget.existingOrderId!, cart.itemsJson);
+        final order =
+            await api.addOrderItems(widget.existingOrderId!, cart.itemsJson);
         cart.clear();
         if (!mounted) return;
         Navigator.of(context).pop(); // back to the take-order/add screen
@@ -54,10 +57,10 @@ class _OrderCartScreenState extends State<OrderCartScreen> {
             content: Text(
                 'Added items to Order #${order.id} • new total ${formatMoney(order.total)}')));
       } else {
-        final order = await api.placeOrder(cart.buildOrderPayload(
-          tableNumber: widget.tableNumber,
-          notes: _notes.text.trim(),
-        ));
+        if (!ConnectivityMonitor.instance.isOnline.value) {
+          throw const DeviceOfflineException(); // handled below, no wait
+        }
+        final order = await api.placeOrder(payload);
         cart.clear();
         cart.tablesChanged(); // lets the tables grid refresh (table now occupied)
         if (!mounted) return;
@@ -68,10 +71,32 @@ class _OrderCartScreenState extends State<OrderCartScreen> {
                 'Order #${order.id} placed for Table ${widget.tableNumber}')));
       }
     } catch (e) {
+      // Network/backend unreachable: queue the new order and keep working.
+      // (Add-to-existing needs the server order id, so it stays online-only.)
+      if (!_isAddMode && isConnectivityError(e)) {
+        await _queueOffline(payload, messenger);
+        return;
+      }
       if (!mounted) return;
       setState(() => _submitting = false);
       messenger.showSnackBar(SnackBar(content: Text('$e')));
     }
+  }
+
+  /// Save the order to the durable queue and bounce back to the table grid.
+  Future<void> _queueOffline(
+      Map<String, dynamic> payload, ScaffoldMessengerState messenger) async {
+    final cart = context.read<CartState>();
+    final op = await OfflineQueue.instance.enqueue(
+      type: 'order_create',
+      payload: payload,
+    );
+    cart.clear();
+    if (!mounted) return;
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    messenger.showSnackBar(SnackBar(
+        content: Text('Offline — order saved as ${op.localId} for Table '
+            '${widget.tableNumber} and syncs automatically')));
   }
 
   @override

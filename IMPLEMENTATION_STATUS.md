@@ -1,5 +1,78 @@
 # 🎯 Multi-Staff POS System Implementation Summary
 
+## 🆕 Startup-Plan Phases (cafe-pos-startup-plan.md) — IMPLEMENTED (Oct 2026)
+
+Four parallel-built phases on top of the earlier multi-staff POS work. Backend
+suites: `smoke_offline`, `test_phase1_billing`, `test_phase2_ops`,
+`test_phase3_growth`, `test_phase4_tally`, `test_sync`, `test_ask_offline`,
+`test_recommendations_offline` — all passing. `flutter analyze` = 0 errors.
+
+### Phase 1 — Billing engine ✅
+- GST: menu `gst_rate`/`hsn_code`, tax-inclusive pricing, per-line
+  `taxable_value/cgst/sgst`, order `sub_total`/`tax_total` (legacy orders = 0)
+- Split payments: `payments: [{method, amount, ref?}]` (cash/upi/card/gpay/
+  credit/other/loyalty), exact-sum validation, split UI in collect dialog
+- Thermal ESC/POS: `app/services/printing.py` + `POST /printing/receipt|kot/<id>`
+  (dry-run when `ESCPOS_PRINTER_HOST` unset); Print button on bill screen
+- WhatsApp bill: `GET /orders/<id>/bill` (server-rendered GST text + wa.me link)
+- Day-end Z-report: `GET /admin/reports/z` (tax breakup, by payment, cash
+  expected, top items); P&L fixes (real month length, margin = net/revenue)
+
+### Phase 2 — Cafe ops ✅
+- KOT: auto-print on order create (`AUTO_PRINT_KOT=1` + printer host), manual
+  Print KOT buttons on staff queue + kitchen display
+- Low-stock alerts: `reorder_level` per inventory item (0 = off),
+  `GET /admin/inventory/alerts`, badges + banner in inventory screen
+- Floor map: table layout (`zone/x/y/w/h/shape`), owner drag editor
+  (`PUT /admin/tables/<n>/layout`), staff Grid/Floor toggle
+
+### Phase 3 — Growth hooks ✅
+- QR table ordering: public menu + QR PNG (`/public/qr/<table>`), customer
+  self-order flow (revived `screens/customer/*`), status tracking; occupied
+  tables accept QR orders without stealing the staff lock
+- Loyalty: phone-based points ledger, earn on collect, redeem as a `loyalty`
+  payment row at collect (owner Growth tab + redeem UI)
+- Swiggy/Zomato: `POST /integrations/{swiggy,zomato}/orders` adapter with
+  `X-Integration-Key` auth, `source` on orders, Delivery section
+- Staff sales report: `GET /admin/reports/staff` + Staff tab on owner reports
+
+### Phase 4 — Accounting bridge ✅
+- Tally Prime Import-Data XML (stable GUIDs, Sales/CGST/SGST/party ledgers) +
+  CSV: `GET /export/tally?from&to&format=`
+- GSTR-1 (B2C + HSN + rate summary) and GSTR-3B 4.1(a): `GET /export/gstr1|
+  gstr3b?period=YYYY-MM&format=json|csv` (B2B skipped — no customer GSTIN)
+- CA read-only login: `cafe_ca` role, global read-only guard + per-route
+  allow-list; owner creates CAs via `POST /admin/staff`; mobile `CaShell`
+  (Daily / Z-Report / Exports); owner Exports entry
+
+### Universal thermal-printer configuration ✅
+- Any ESC/POS printer (Epson, Xprinter, TVS, Bixolon, generic 58/80mm) is
+  configurable from the app: owner → More → **Printers**
+- Modes: **Network** (WiFi/LAN — direct socket from Android, backend relay
+  `/printing/send` on web/fallback), **USB-OTG** (`usb_serial`, Android),
+  **Bluetooth** (`print_bluetooth_thermal`, Android; pair in system settings)
+- App fetches raw ESC/POS bytes (`GET /printing/{receipt,kot,test}/bytes`) and
+  sends via the chosen transport; Test-print button in settings; print buttons
+  in bill/staff/kitchen screens use the same service (snackbar feedback, never
+  crashes). Web degrades gracefully (network only, via backend relay).
+- Auto-KOT on order create still uses backend env (`ESCPOS_PRINTER_HOST`,
+  `AUTO_PRINT_KOT=1` in docker-compose).
+
+### Offline-first sync ✅
+- Backend: `POST /sync/batch` (idempotent ops via `client_op_id`, per-op
+  errors), `GET /sync/pull?since=` (delta orders + menu/tables/inventory)
+- Mobile: durable FIFO queue (SharedPreferences), connectivity monitor,
+  offline banner + pending count in `ShellAppBar`, staff cart & QR checkout
+  queue orders offline and reconcile temp ids on reconnect; collect/payment
+  stays online-only
+
+### Still open
+Razorpay (payments = bookkeeping + GPay test mode), real WhatsApp Business API,
+real Swiggy/Zomato credentials, nightly Tally sync scheduler, Gujarati/Hindi
+i18n, native QR deep-link handler, offline-hardened web PWA, GTM/validation.
+
+---
+
 ## ✅ Completed Phases
 
 ### Phase 1: Customer Name Input ✅

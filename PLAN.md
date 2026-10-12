@@ -199,7 +199,7 @@ Order total is computed **server-side**: `base_price + sum(price_delta of select
 - **Checkout** — name + optional phone, pickup type (counter/table), `POST /orders`.
 - **Order status** — shows the pickup number and live status (`received → preparing → ready → collected`) via `GET /orders/<id>`, refreshed on pull-to-refresh or a short poll.
 
-`api_client.dart` holds one base URL (`http://10.0.2.2:5000` for Android emulator, `http://localhost:5000` for iOS sim) so switching environments is a one-line change.
+`api_client.dart` holds one base URL (`http://10.0.2.2:9999` for Android emulator, `http://localhost:9999` for iOS sim) so switching environments is a one-line change.
 
 ## 4b. Flutter admin (same app, admin login)
 

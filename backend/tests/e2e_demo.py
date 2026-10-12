@@ -11,7 +11,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-BASE_URL = "http://localhost:5000"
+BASE_URL = "http://localhost:9999"
 
 
 def req(method: str, path: str, data: Any = None, token: str = None) -> dict:

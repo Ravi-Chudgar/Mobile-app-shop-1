@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify, g
 
 from ..auth import staff_required, kitchen_required, any_required
 from ..repositories import orders as orders_repo
+from ..services import printing as printing_service
 from ..util import ApiError
 
 bp = Blueprint("orders", __name__)
@@ -13,6 +14,8 @@ bp = Blueprint("orders", __name__)
 def create_order():
     payload = request.get_json(silent=True) or {}
     order = orders_repo.create(payload, taken_by=g.user.get("sub"))
+    # Best-effort kitchen ticket (no-op unless AUTO_PRINT_KOT is enabled).
+    printing_service.maybe_auto_print_kot(order)
     return jsonify(order), 201
 
 
@@ -46,6 +49,8 @@ def set_status(order_id):
             confirm_payment=bool(payload.get("paid")),
             payment_method=payload.get("payment_method"),
             payment_token=payload.get("payment_token"),
+            payments=payload.get("payments"),
+            redeem_points=payload.get("redeem_points"),
         ))
     return jsonify(orders_repo.advance_status(order_id))
 

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/menu_item.dart';
 import '../../services/api_client.dart';
+import '../../services/offline/offline.dart';
 import '../../state/cart_state.dart';
 import '../../util/money.dart';
 import '../../widgets/menu_image.dart';
@@ -37,7 +40,21 @@ class _TakeOrderScreenState extends State<TakeOrderScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CartState>().clear();
     });
-    _future = context.read<ApiClient>().fetchMenu();
+    _future = _loadMenu();
+  }
+
+  /// Fetch the menu, falling back to the last-good snapshot when offline so
+  /// staff can keep building carts (submitting them goes through the queue).
+  Future<List<MenuItem>> _loadMenu() async {
+    try {
+      final items = await context.read<ApiClient>().fetchMenu();
+      unawaited(MenuCache.save(items));
+      return items;
+    } catch (e) {
+      final cached = await MenuCache.load();
+      if (cached != null) return cached;
+      rethrow;
+    }
   }
 
   String _pretty(String c) => c
@@ -78,7 +95,9 @@ class _TakeOrderScreenState extends State<TakeOrderScreen> {
                   child: Text(_pretty(cat),
                       style: Theme.of(context).textTheme.titleLarge),
                 ),
-                ...items.where((i) => i.category == cat).map((i) => _Tile(item: i)),
+                ...items
+                    .where((i) => i.category == cat)
+                    .map((i) => _Tile(item: i)),
               ],
             ],
           );

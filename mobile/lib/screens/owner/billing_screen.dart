@@ -14,6 +14,7 @@ import 'bill_screen.dart';
 /// and the ability to confirm payment.
 
 String _short(String s) => s.length > 26 ? '${s.substring(0, 26)}…' : s;
+
 class BillingScreen extends StatefulWidget {
   const BillingScreen({super.key});
 
@@ -76,8 +77,7 @@ class _BillingScreenState extends State<BillingScreen> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
@@ -222,9 +222,7 @@ class _Tile extends StatelessWidget {
               child: Text(value,
                   maxLines: 1,
                   style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      color: color)),
+                      fontWeight: FontWeight.bold, fontSize: 15, color: color)),
             ),
           ],
         ),
@@ -241,9 +239,8 @@ class _DaySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final date = DateTime.tryParse(day.date);
-    final title = date == null
-        ? day.date
-        : DateFormat('EEE, d MMM yyyy').format(date);
+    final title =
+        date == null ? day.date : DateFormat('EEE, d MMM yyyy').format(date);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -261,7 +258,8 @@ class _DaySection extends StatelessWidget {
             const SizedBox(width: 8),
             FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text('${day.orderCount} orders • ${formatMoney(day.total)}',
+              child: Text(
+                  '${day.orderCount} orders • ${formatMoney(day.total)}',
                   style: const TextStyle(fontSize: 12, color: Colors.black54)),
             ),
           ],
@@ -308,8 +306,8 @@ class _OrderCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Chip(
                     label: Text(isPaid ? 'PAID' : 'UNPAID',
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 11)),
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 11)),
                     backgroundColor: isPaid ? Colors.green : Colors.orange,
                     visualDensity: VisualDensity.compact,
                   ),
@@ -322,102 +320,102 @@ class _OrderCard extends StatelessWidget {
                   ),
                 ],
               ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.person_outline,
-                    size: 14, color: Colors.grey.shade600),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(order.customerName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13)),
-                ),
-                const SizedBox(width: 12),
-                if (order.tableNumber != null) ...[
-                  Icon(Icons.table_restaurant_outlined,
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.person_outline,
                       size: 14, color: Colors.grey.shade600),
                   const SizedBox(width: 4),
                   Flexible(
-                    child: Text('Table ${order.tableNumber}',
+                    child: Text(order.customerName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 13)),
                   ),
+                  const SizedBox(width: 12),
+                  if (order.tableNumber != null) ...[
+                    Icon(Icons.table_restaurant_outlined,
+                        size: 14, color: Colors.grey.shade600),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text('Table ${order.tableNumber}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13)),
+                    ),
+                  ],
                 ],
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Icon(Icons.payments_outlined,
-                    size: 14, color: Colors.grey.shade600),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(_prettyPayment(order.paymentMethod),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13)),
-                ),
-                const SizedBox(width: 12),
-                if (order.takenBy != null) ...[
-                  Icon(Icons.badge_outlined,
-                      size: 14, color: Colors.grey.shade600),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text('Served by ${order.takenBy}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 13)),
-                  ),
-                ],
-              ],
-            ),
-            if (order.paymentToken?.isNotEmpty ?? false) ...[
+              ),
               const SizedBox(height: 6),
               Row(
                 children: [
-                  Icon(Icons.verified_outlined,
-                      size: 14, color: Colors.green.shade600),
+                  Icon(Icons.payments_outlined,
+                      size: 14, color: Colors.grey.shade600),
                   const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'GPay ref ${_short(order.paymentToken!)}',
-                      style: const TextStyle(
-                          fontSize: 12, color: Colors.black54),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                  Flexible(
+                    child: Text(_prettyPayment(order.paymentMethod),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13)),
                   ),
+                  const SizedBox(width: 12),
+                  if (order.takenBy != null) ...[
+                    Icon(Icons.badge_outlined,
+                        size: 14, color: Colors.grey.shade600),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text('Served by ${order.takenBy}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13)),
+                    ),
+                  ],
                 ],
               ),
-            ],
-            if (!isPaid) ...[
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.tonal(
-                  onPressed: () => onMarkPaid(order),
-                  child: const Text('Mark as paid'),
+              if (order.paymentToken?.isNotEmpty ?? false) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(Icons.verified_outlined,
+                        size: 14, color: Colors.green.shade600),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'GPay ref ${_short(order.paymentToken!)}',
+                        style: const TextStyle(
+                            fontSize: 12, color: Colors.black54),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-            if (isPaid) ...[
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.icon(
-                  onPressed: () => _sendWhatsApp(context),
-                  icon: const Icon(Icons.chat, size: 18),
-                  label: const Text('Send Bill'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.green,
+              ],
+              if (!isPaid) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.tonal(
+                    onPressed: () => onMarkPaid(order),
+                    child: const Text('Mark as paid'),
                   ),
                 ),
-              ),
+              ],
+              if (isPaid) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    onPressed: () => _sendWhatsApp(context),
+                    icon: const Icon(Icons.chat, size: 18),
+                    label: const Text('Send Bill'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.green,
+                    ),
+                  ),
+                ),
+              ],
             ],
-          ],
-        ),
+          ),
         ),
       ),
     );
@@ -451,7 +449,8 @@ class _OrderCard extends StatelessWidget {
           '${opts.isNotEmpty ? '\n$opts' : ''}';
     }).join('\n');
 
-    final upiLink = 'upi://pay?pa=${AppConfig.upiId}&pn=${Uri.encodeComponent(AppConfig.merchantName)}&am=${order.total}&cu=INR';
+    final upiLink =
+        'upi://pay?pa=${AppConfig.upiId}&pn=${Uri.encodeComponent(AppConfig.merchantName)}&am=${order.total}&cu=INR';
 
     final buffer = StringBuffer()
       ..writeln('═══════════════════════════')
@@ -459,7 +458,8 @@ class _OrderCard extends StatelessWidget {
       ..writeln('═══════════════════════════')
       ..writeln()
       ..writeln('Bill #: ${order.id}')
-      ..writeln('Date: ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.tryParse(order.createdAt) ?? DateTime.now())}')
+      ..writeln(
+          'Date: ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.tryParse(order.createdAt) ?? DateTime.now())}')
       ..writeln('Customer: ${order.customerName}')
       ..writeln('Table: ${order.tableNumber ?? "N/A"}')
       ..writeln('Staff: ${order.takenBy ?? 'N/A'}')
@@ -481,12 +481,14 @@ class _OrderCard extends StatelessWidget {
       ..writeln('═══════════════════════════');
     final billText = buffer.toString();
 
-    final url = Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(billText)}');
+    final url =
+        Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(billText)}');
+    final messenger = ScaffoldMessenger.of(context);
     canLaunchUrl(url).then((ok) {
       if (ok) {
         launchUrl(url, mode: LaunchMode.externalApplication);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(content: Text('Could not open WhatsApp')),
         );
       }

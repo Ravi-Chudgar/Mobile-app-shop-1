@@ -7,9 +7,17 @@ import '../../models/sales_summary.dart';
 import '../../services/api_client.dart';
 import '../../state/auth_state.dart';
 import '../../util/money.dart';
+import '../../widgets/ui_kit.dart';
+import '../owner/billing_screen.dart';
+import '../owner/growth_screen.dart';
+import '../owner/tables_admin_screen.dart';
+import 'inventory_screen.dart';
+import 'menu_editor_screen.dart';
+import 'orders_queue_screen.dart';
 
-/// Vibrant & playful sales dashboard: soft cream background with colorful
-/// blobs, emoji accents, candy gradients, and an interactive range switcher.
+/// Warm, glanceable sales dashboard: latte-art hero with the day's headline
+/// numbers, a KPI strip, quick jumps into the owner screens, and the fl_chart
+/// sales/payments/best-seller panels — all on the shared coffee design kit.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -25,6 +33,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<SalesSummary> _series = []; // chart series for the range
   bool _loading = true;
   String? _error;
+
+  // Best-effort extras for badges/KPIs — advisory, so never fatal.
+  int? _unpaid; // outstanding dues, paise
+  int? _lowStock; // inventory items at/below reorder level
 
   bool get _isToday => _range == 'today';
 
@@ -42,7 +54,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final api = context.read<ApiClient>();
     try {
       final date = _fmt.format(_selected);
-      final days = _range == '7d' ? 7 : _range == '30d' ? 30 : 1;
+      final days = _range == '7d'
+          ? 7
+          : _range == '30d'
+              ? 30
+              : 1;
       final from = _fmt.format(_selected.subtract(Duration(days: days - 1)));
       final results = await Future.wait([
         api.dailyReport(date),
@@ -57,6 +73,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _series = series;
         _loading = false;
       });
+      await _loadExtras(api);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -64,6 +81,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _loading = false;
       });
     }
+  }
+
+  Future<void> _loadExtras(ApiClient api) async {
+    int? unpaid;
+    int? low;
+    try {
+      unpaid = (await api.fetchBilling()).unpaid;
+    } catch (_) {
+      // Billing summary is optional here — the dashboard still works.
+    }
+    try {
+      low = (await api.fetchInventoryAlerts()).length;
+    } catch (_) {
+      // Alerts are advisory — same guard as the inventory screen.
+    }
+    if (!mounted) return;
+    setState(() {
+      _unpaid = unpaid;
+      _lowStock = low;
+    });
   }
 
   static SalesSummary _summarize(List<SalesSummary> series) {
@@ -110,61 +147,134 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return ((cur - prev) * 100 / prev).round();
   }
 
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) return _RetryView(message: _error!, onRetry: _load);
-    final scheme = Theme.of(context).colorScheme;
     final agg = _agg!;
-    final ownerName = context.read<AuthState>().name ?? 'Owner';
+    final auth = context.read<AuthState>();
+    final ownerName = auth.name ?? auth.username ?? 'Owner';
     final delta = _deltaPct();
     final avg =
         agg.orderCount == 0 ? 0 : (agg.grossSales / agg.orderCount).round();
-    final isLive = _isToday &&
-        _fmt.format(_selected) == _fmt.format(DateTime.now());
+    final isLive =
+        _isToday && _fmt.format(_selected) == _fmt.format(DateTime.now());
+    final dateLabel = DateFormat('EEEE, d MMMM y').format(_selected);
 
     return Stack(
       children: [
-        // Playful background blobs.
-        const Positioned(top: -50, right: -40, child: _Blob(color: Color(0xFFFFB27D), size: 190)),
-        const Positioned(top: 170, left: -70, child: _Blob(color: Color(0xFF7CE7D8), size: 170)),
-        const Positioned(bottom: 140, right: -60, child: _Blob(color: Color(0xFFF8B5D2), size: 180)),
+        // Soft cream-on-cream blobs keep the background lively, not loud.
+        const Positioned(
+            top: -50,
+            right: -40,
+            child: _Blob(color: CafePalette.latte, size: 190)),
+        const Positioned(
+            bottom: 160,
+            left: -70,
+            child: _Blob(color: CafePalette.caramel, size: 170)),
         RefreshIndicator(
           onRefresh: _load,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              // ── Hero: greeting, date, headline revenue ──
+              HeroBanner(
+                gradient: CafeGradients.espresso,
+                illustration: Align(
+                  alignment: const Alignment(0.85, 0.1),
+                  child: Opacity(
+                    opacity: 0.18,
+                    child: SizedBox(
+                      width: 180,
+                      height: 180,
+                      child: CustomPaint(painter: LatteArtPainter()),
+                    ),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Text('👋 Hey, ${ownerName.split(' ').first}!',
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
-                                ?.copyWith(fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 2),
-                        Text(
-                          isLive
-                              ? 'Have a great day · ${DateFormat('EEEE, d MMM').format(_selected)}'
-                              : DateFormat('EEEE, d MMM').format(_selected),
-                          style: TextStyle(
-                              fontSize: 13, color: scheme.onSurfaceVariant),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${_greeting()}, $ownerName',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                dateLabel,
+                                style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.75),
+                                    fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Change date',
+                          onPressed: _pickDate,
+                          icon: const Icon(Icons.calendar_month,
+                              color: Colors.white, size: 22),
                         ),
                       ],
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Change date',
-                    onPressed: _pickDate,
-                    icon: Icon(Icons.calendar_month_outlined,
-                        color: scheme.onSurfaceVariant),
-                  ),
-                ],
+                    const SizedBox(height: 14),
+                    Text(
+                      isLive ? "TODAY'S REVENUE" : 'REVENUE',
+                      style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2),
+                    ),
+                    const SizedBox(height: 4),
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: agg.grossSales.toDouble()),
+                      duration: const Duration(milliseconds: 900),
+                      curve: Curves.easeOutCubic,
+                      builder: (_, v, __) => FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          formatMoney(v.round()),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 40,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -1),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (delta != null) _DeltaPill(delta: delta),
+                        _HeroChip(label: '🧾 ${agg.orderCount} orders'),
+                        if (agg.orderCount > 0)
+                          _HeroChip(label: '☕ avg ${formatMoney(avg)}'),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 6),
               _RangeSelector(
                 value: _range,
                 onChanged: (r) {
@@ -172,65 +282,170 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _load();
                 },
               ),
-              const SizedBox(height: 16),
-              _TotalCard(
-                total: agg.grossSales,
-                orders: agg.orderCount,
-                delta: delta,
-                isToday: _isToday,
+
+              // ── KPI strip ──
+              SectionHeader(
+                title: 'Key numbers',
+                subtitle: isLive
+                    ? 'Live for today'
+                    : DateFormat('d MMM y').format(_selected),
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _MetricTile(
-                      emoji: '🧾',
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cols = constraints.maxWidth > 900 ? 3 : 2;
+                  const gap = 10.0;
+                  final itemW =
+                      (constraints.maxWidth - gap * (cols - 1)) / cols;
+                  final stats = <Widget>[
+                    StatCard(
                       label: 'Orders',
                       value: '${agg.orderCount}',
-                      colors: const [Color(0xFFFF9A62), Color(0xFFF97316)],
+                      icon: Icons.receipt_long,
+                      gradient: CafeGradients.peach,
+                      caption: 'tickets in range',
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _MetricTile(
-                      emoji: '💰',
+                    StatCard(
+                      label: 'Revenue',
+                      value: formatMoney(agg.grossSales),
+                      icon: Icons.payments,
+                      gradient: CafeGradients.espresso,
+                      caption: 'gross sales',
+                    ),
+                    StatCard(
                       label: 'Avg order',
                       value: formatMoney(avg),
-                      colors: const [Color(0xFF5EE0CE), Color(0xFF14B8A6)],
+                      icon: Icons.shopping_bag,
+                      gradient: CafeGradients.mint,
+                      caption: 'per ticket',
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _MetricTile(
-                      emoji: '⚡',
+                    if (_unpaid != null)
+                      StatCard(
+                        label: 'Unpaid dues',
+                        value: formatMoney(_unpaid!),
+                        icon: Icons.account_balance_wallet,
+                        gradient: CafeGradients.berry,
+                        caption:
+                            _unpaid! > 0 ? 'needs collecting' : 'all settled',
+                      ),
+                    if (_lowStock != null && _lowStock! > 0)
+                      StatCard(
+                        label: 'Low stock',
+                        value: '$_lowStock items',
+                        icon: Icons.warning_amber,
+                        gradient: CafeGradients.sunrise,
+                        caption: 'at reorder level',
+                      ),
+                    StatCard(
                       label: 'Peak day',
                       value: _peakDay(),
-                      colors: const [Color(0xFFF8A9C8), Color(0xFFEC4899)],
+                      icon: Icons.calendar_month,
+                      gradient: CafeGradients.sky,
+                      caption: _isToday ? 'busiest day so far' : 'busiest day',
                     ),
-                  ),
-                ],
+                  ];
+                  return Wrap(
+                    spacing: gap,
+                    runSpacing: gap,
+                    children: [
+                      for (final s in stats) SizedBox(width: itemW, child: s),
+                    ],
+                  );
+                },
               ),
-              const SizedBox(height: 16),
+
+              // ── Quick actions ──
+              const SectionHeader(
+                title: 'Quick actions',
+                subtitle: 'Jump to a screen',
+              ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cols = constraints.maxWidth > 860 ? 3 : 2;
+                  const gap = 10.0;
+                  final itemW =
+                      (constraints.maxWidth - gap * (cols - 1)) / cols;
+                  final actions = <Widget>[
+                    QuickActionTile(
+                      icon: Icons.table_restaurant,
+                      label: 'Tables',
+                      gradient: CafeGradients.espresso,
+                      onTap: () => _push(const TablesAdminScreen()),
+                    ),
+                    QuickActionTile(
+                      icon: Icons.receipt_long,
+                      label: 'Orders',
+                      gradient: CafeGradients.peach,
+                      onTap: () => _push(const OrdersQueueScreen()),
+                    ),
+                    QuickActionTile(
+                      icon: Icons.point_of_sale,
+                      label: 'Billing',
+                      gradient: CafeGradients.mint,
+                      badge: (_unpaid ?? 0) > 0 ? formatMoney(_unpaid!) : null,
+                      onTap: () => _push(const BillingScreen()),
+                    ),
+                    QuickActionTile(
+                      icon: Icons.restaurant_menu,
+                      label: 'Menu',
+                      gradient: CafeGradients.sunrise,
+                      onTap: () => _push(const MenuEditorScreen()),
+                    ),
+                    QuickActionTile(
+                      icon: Icons.inventory_2,
+                      label: 'Inventory',
+                      gradient: CafeGradients.sky,
+                      badge: (_lowStock ?? 0) > 0 ? '$_lowStock' : null,
+                      onTap: () => _push(const InventoryScreen()),
+                    ),
+                    QuickActionTile(
+                      icon: Icons.trending_up,
+                      label: 'Growth',
+                      gradient: CafeGradients.berry,
+                      onTap: () => _push(const GrowthScreen()),
+                    ),
+                  ];
+                  return Wrap(
+                    spacing: gap,
+                    runSpacing: gap,
+                    children: [
+                      for (final a in actions) SizedBox(width: itemW, child: a),
+                    ],
+                  );
+                },
+              ),
+
+              // ── Charts ──
               _Card(
-                title: '📈 Sales over time',
-                child: SizedBox(
-                    height: 180, child: _TrendBars(series: _series)),
+                title: 'Sales over time',
+                subtitle: 'Gross sales per day',
+                trailing: Icon(Icons.bar_chart_rounded,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+                child:
+                    SizedBox(height: 180, child: _TrendBars(series: _series)),
               ),
-              const SizedBox(height: 16),
               LayoutBuilder(
                 builder: (context, constraints) {
                   final pay = agg.byPayment.isNotEmpty
                       ? _Card(
-                          title: '💳 Payments',
+                          title: 'Payments',
+                          subtitle: 'How the cafe got paid',
                           child: _PaymentDonut(byPayment: agg.byPayment))
                       : null;
                   final best = _isToday && agg.topItems.isNotEmpty
                       ? _Card(
-                          title: '🏆 Best sellers',
+                          title: 'Best sellers',
+                          subtitle: 'Ranked by quantity sold',
                           child: Column(
                             children: [
                               for (var i = 0; i < agg.topItems.length; i++)
-                                _TopSellerRow(index: i, item: agg.topItems[i]),
+                                _TopSellerRow(
+                                  index: i,
+                                  item: agg.topItems[i],
+                                  maxQty: agg.topItems
+                                      .map((t) => t.qty)
+                                      .fold<int>(0, (m, q) => q > m ? q : m),
+                                ),
                             ],
                           ),
                         )
@@ -243,7 +458,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         if (pay != null) pay,
                         if (pay != null && best != null)
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 8),
                         if (best != null) best,
                       ],
                     );
@@ -259,19 +474,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   );
                 },
               ),
-              if (agg.byCategory.isNotEmpty) ...[
-                const SizedBox(height: 16),
+              if (agg.byCategory.isNotEmpty)
                 _Card(
-                  title: '🍩 By category',
-                  child: _CategoryBars(
-                      entries: agg.byCategory.entries.toList()),
+                  title: 'By category',
+                  subtitle: 'Where the revenue came from',
+                  child:
+                      _CategoryBars(entries: agg.byCategory.entries.toList()),
                 ),
-              ],
             ],
           ),
         ),
       ],
     );
+  }
+
+  void _push(Widget screen) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
   String _peakDay() {
@@ -298,7 +516,7 @@ class _Blob extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: color.withValues(alpha: 0.16),
+        color: color.withValues(alpha: 0.35),
       ),
     );
   }
@@ -324,117 +542,33 @@ class _RangeSelector extends StatelessWidget {
         visualDensity: VisualDensity.compact,
         backgroundColor: Colors.white,
         foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-        selectedBackgroundColor: const Color(0xFFFF9A62),
+        selectedBackgroundColor: CafePalette.coffee,
         selectedForegroundColor: Colors.white,
         side: BorderSide.none,
-        textStyle: const TextStyle(fontWeight: FontWeight.w700),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
   }
 }
 
-class _TotalCard extends StatelessWidget {
-  final int total;
-  final int orders;
-  final int? delta;
-  final bool isToday;
-  const _TotalCard({
-    required this.total,
-    required this.orders,
-    required this.delta,
-    required this.isToday,
-  });
+/// Small translucent pill used on the dark hero surface.
+class _HeroChip extends StatelessWidget {
+  final String label;
+  const _HeroChip({required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFA56B), Color(0xFFFFC371)],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFF97316).withValues(alpha: 0.35),
-            blurRadius: 22,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        color: Colors.white.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
       ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -6,
-            top: -14,
-            child: Text('🍩',
-                style: TextStyle(
-                    fontSize: 76,
-                    color: Colors.white.withValues(alpha: 0.3))),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isToday ? 'TODAY\'S SALES' : 'TOTAL SALES',
-                  style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1),
-                ),
-                const SizedBox(height: 6),
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0, end: total.toDouble()),
-                  duration: const Duration(milliseconds: 900),
-                  curve: Curves.easeOutCubic,
-                  builder: (_, v, __) => FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      formatMoney(v.round()),
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 40,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -1),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    if (delta != null) ...[
-                      _DeltaPill(delta: delta!),
-                      const SizedBox(width: 8),
-                    ],
-                    Flexible(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.25),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text('🧾 $orders orders',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style:
-                                const TextStyle(color: Colors.white, fontSize: 12)),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      child: Text(label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white, fontSize: 12)),
     );
   }
 }
@@ -469,95 +603,59 @@ class _DeltaPill extends StatelessWidget {
   }
 }
 
-class _MetricTile extends StatelessWidget {
-  final String emoji;
-  final String label;
-  final String value;
-  final List<Color> colors;
-  const _MetricTile({
-    required this.emoji,
-    required this.label,
-    required this.value,
-    required this.colors,
+/// Section header + white framed panel used for every chart block.
+class _Card extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+  final Widget child;
+  const _Card({
+    required this.title,
+    this.subtitle,
+    this.trailing,
+    required this.child,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: colors),
-                borderRadius: BorderRadius.circular(12),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionHeader(title: title, subtitle: subtitle, trailing: trailing),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+            boxShadow: [
+              BoxShadow(
+                color: CafePalette.coffee.withValues(alpha: 0.06),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
               ),
-              child: Text(emoji, style: const TextStyle(fontSize: 16)),
-            ),
-            const SizedBox(height: 10),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(value,
-                  maxLines: 1,
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w800)),
-            ),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 11,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          ],
+            ],
+          ),
+          child: child,
         ),
-      ),
+      ],
     );
   }
 }
 
-class _Card extends StatelessWidget {
-  final String title;
-  final Widget child;
-  const _Card({required this.title, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 14),
-            child,
-          ],
-        ),
-      ),
-    );
-  }
-}
+/// Warm coffee/peach/mint series shared by every chart on this screen.
+const _chartColors = [
+  CafePalette.peach,
+  CafePalette.mint,
+  CafePalette.coffee,
+  CafePalette.sunshine,
+  CafePalette.berry,
+];
 
 class _TrendBars extends StatelessWidget {
   final List<SalesSummary> series;
   const _TrendBars({required this.series});
-
-  static const _colors = [
-    Color(0xFFF97316),
-    Color(0xFF14B8A6),
-    Color(0xFFEC4899),
-    Color(0xFFFBBF24),
-    Color(0xFF8B5CF6),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -589,7 +687,8 @@ class _TrendBars extends StatelessWidget {
                 final i = value.toInt();
                 if (i < 0 || i >= series.length) return const SizedBox();
                 final date = DateTime.tryParse(series[i].date);
-                final label = date == null ? '' : DateFormat('d/M').format(date);
+                final label =
+                    date == null ? '' : DateFormat('d/M').format(date);
                 return Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(label, style: const TextStyle(fontSize: 10)),
@@ -612,12 +711,14 @@ class _TrendBars extends StatelessWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      _colors[i % _colors.length].withValues(alpha: 0.9),
-                      _colors[i % _colors.length].withValues(alpha: 0.35),
+                      _chartColors[i % _chartColors.length]
+                          .withValues(alpha: 0.95),
+                      _chartColors[i % _chartColors.length]
+                          .withValues(alpha: 0.35),
                     ],
                   ),
-                  borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(8)),
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(8)),
                 ),
               ],
             ),
@@ -646,14 +747,6 @@ class _PaymentDonut extends StatelessWidget {
   final Map<String, int> byPayment;
   const _PaymentDonut({required this.byPayment});
 
-  static const _colors = [
-    Color(0xFFF97316),
-    Color(0xFF14B8A6),
-    Color(0xFFEC4899),
-    Color(0xFFFBBF24),
-    Color(0xFF8B5CF6),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -676,7 +769,7 @@ class _PaymentDonut extends StatelessWidget {
                     for (var i = 0; i < entries.length; i++)
                       PieChartSectionData(
                         value: entries[i].value.toDouble(),
-                        color: _colors[i % _colors.length],
+                        color: _chartColors[i % _chartColors.length],
                         radius: 42,
                         showTitle: false,
                       ),
@@ -720,6 +813,15 @@ class _PaymentDonut extends StatelessWidget {
                             style: const TextStyle(fontSize: 13)),
                       ),
                       const SizedBox(width: 6),
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: _chartColors[i % _chartColors.length],
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
                       Flexible(
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
@@ -743,44 +845,90 @@ class _PaymentDonut extends StatelessWidget {
 class _TopSellerRow extends StatelessWidget {
   final int index;
   final TopItem item;
-  const _TopSellerRow({required this.index, required this.item});
-
-  static const _medalColors = [
-    Color(0xFFEAB308),
-    Color(0xFF94A3B8),
-    Color(0xFFD97706),
-  ];
+  final int maxQty;
+  const _TopSellerRow({
+    required this.index,
+    required this.item,
+    required this.maxQty,
+  });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final medal = index < 3;
+    final progress = maxQty == 0 ? 0.0 : item.qty / maxQty;
+    final art = CafeGradients.forSeed(item.name);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: medal
-                ? _medalColors[index].withValues(alpha: 0.2)
-                : scheme.surfaceContainerHighest,
-            child: Text(
-              medal ? '🥇🥈🥉'.substring(index * 2, index * 2 + 2) : '${index + 1}',
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: medal ? _medalColors[index] : scheme.onSurfaceVariant),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              gradient: art,
+              borderRadius: BorderRadius.circular(13),
+              boxShadow: [
+                BoxShadow(
+                  color: art.colors.first.withValues(alpha: 0.30),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
+            alignment: Alignment.center,
+            child: Text(dishEmoji(item.name),
+                style: const TextStyle(fontSize: 19)),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text('${item.qty}× ${item.name}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('#${index + 1}',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: scheme.onSurfaceVariant)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(item.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w700)),
+                    ),
+                    Text(formatMoney(item.revenue),
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 6,
+                          color: art.colors.first,
+                          backgroundColor: CafePalette.latte,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text('${item.qty} sold',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onSurfaceVariant)),
+                  ],
+                ),
+              ],
+            ),
           ),
-          Text(formatMoney(item.revenue),
-              style: const TextStyle(fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -790,14 +938,6 @@ class _TopSellerRow extends StatelessWidget {
 class _CategoryBars extends StatelessWidget {
   final List<MapEntry<String, int>> entries;
   const _CategoryBars({required this.entries});
-
-  static const _colors = [
-    Color(0xFFF97316),
-    Color(0xFF14B8A6),
-    Color(0xFFEC4899),
-    Color(0xFFFBBF24),
-    Color(0xFF8B5CF6),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -820,11 +960,8 @@ class _CategoryBars extends StatelessWidget {
                     child: LinearProgressIndicator(
                       value: maxVal == 0 ? 0 : entries[i].value / maxVal,
                       minHeight: 10,
-                      backgroundColor: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest
-                          .withValues(alpha: 0.7),
-                      color: _colors[i % _colors.length],
+                      backgroundColor: CafePalette.latte,
+                      color: _chartColors[i % _chartColors.length],
                     ),
                   ),
                 ),
@@ -854,8 +991,9 @@ class _RetryView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 40, color: Colors.grey),
-          const SizedBox(height: 8),
+          const Icon(Icons.coffee_outlined,
+              size: 44, color: CafePalette.caramel),
+          const SizedBox(height: 10),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Text(message, textAlign: TextAlign.center),

@@ -7,7 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../config.dart';
 import '../../models/order.dart';
 import '../../services/api_client.dart';
-import '../../util/money.dart';
+import '../../services/printer_models.dart';
+import '../../services/printing_service.dart';
 
 class BillScreen extends StatefulWidget {
   final CafeOrder order;
@@ -20,6 +21,7 @@ class BillScreen extends StatefulWidget {
 class _BillScreenState extends State<BillScreen> {
   late CafeOrder _order;
   bool _processing = false;
+  bool _printing = false;
 
   @override
   void initState() {
@@ -29,52 +31,82 @@ class _BillScreenState extends State<BillScreen> {
 
   String _formatMoney(int amount) => '₹$amount';
 
-  void _copyBill() {
-    final items = _order.items.map((item) {
-      final opts = item.options.isNotEmpty
-          ? '\n   ${item.options.join(" | ")}'
-          : '';
-      return '  ${item.name} x${item.qty}  ₹${item.lineTotal}$opts';
-    }).join('\n');
+  int get _cgstTotal => _order.items.fold(0, (s, l) => s + l.cgst);
+  int get _sgstTotal => _order.items.fold(0, (s, l) => s + l.sgst);
+  int get _taxableTotal => _order.items.fold(0, (s, l) => s + l.taxableValue);
 
-    final buffer = StringBuffer()
-      ..writeln('╭─────────────────────────╮')
-      ..writeln('│     CAFE POS     │')
-      ..writeln('╰─────────────────────────╯')
-      ..writeln()
-      ..writeln('📋 Bill #${_order.id}')
-      ..writeln('📅 ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.tryParse(_order.createdAt) ?? DateTime.now())}')
-      ..writeln('👤 ${_order.customerName}')
-      ..writeln('🪑 Table ${_order.tableNumber ?? "N/A"}')
-      ..writeln('👨‍🍳 Served by: ${_order.takenBy ?? 'N/A'}')
-      ..writeln()
-      ..writeln('─────────────────────────')
-      ..writeln('  ITEM              QTY   AMT')
-      ..writeln('─────────────────────────')
-      ..writeln(items)
-      ..writeln('─────────────────────────')
-      ..writeln()
-      ..writeln('💰 TOTAL: ₹${_order.total}')
-      ..writeln('💳 Payment: ${_order.paymentMethod.toUpperCase()}')
-      ..writeln('✅ Status: ${_order.paymentStatus.toUpperCase()}')
-      ..writeln()
-      ..writeln('─────────────────────────')
-      ..writeln('  Thank you for visiting!')
-      ..writeln('  Visit us again 🙏')
-      ..writeln('─────────────────────────');
+  /// Per-rate GST summary rows: [{"rate": 5, "taxable": ..., "cgst": ...}].
+  List<Map<String, int>> get _taxByRate {
+    final buckets = <int, Map<String, int>>{};
+    for (final line in _order.items) {
+      final rate = line.gstRate ?? 0;
+      final b = buckets.putIfAbsent(
+          rate, () => {'rate': rate, 'taxable': 0, 'cgst': 0, 'sgst': 0});
+      b['taxable'] = b['taxable']! + line.taxableValue;
+      b['cgst'] = b['cgst']! + line.cgst;
+      b['sgst'] = b['sgst']! + line.sgst;
+    }
+    final rates = buckets.keys.toList()..sort();
+    return [for (final r in rates) buckets[r]!];
+  }
 
-    Clipboard.setData(ClipboardData(text: buffer.toString()));
+  /// Server-rendered GST bill text (identical to what WhatsApp receives).
+  /// Falls back to local formatting when the backend is unreachable.
+  Future<String> _billText() async {
+    try {
+      final data = await context.read<ApiClient>().fetchBillText(_order.id);
+      final text = data['text'] as String?;
+      if (text != null && text.isNotEmpty) return text;
+    } catch (_) {
+      // fall through to local formatting
+    }
+    return _buildBillText();
+  }
+
+  Future<void> _copyBill() async {
+    final text = await _billText();
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Bill copied')));
+  }
+
+  Future<void> _print() async {
+    if (_printing) return;
+    setState(() => _printing = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final api = context.read<ApiClient>();
+    try {
+      final result =
+          await PrintingService.instance.printReceipt(_order.id, api);
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: Colors.green,
+        content: Text('✓ $result'),
+      ));
+    } on PrinterException catch (e) {
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: Colors.red.shade700,
+        content: Text('Print failed: ${e.message}'),
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: Colors.red.shade700,
+        content: Text('Print failed: $e'),
+      ));
+    } finally {
+      if (mounted) setState(() => _printing = false);
+    }
   }
 
   String _buildBillText() {
     final items = _order.items.map((item) {
-      final opts = item.options.isNotEmpty
-          ? '\n   ${item.options.join(" | ")}'
-          : '';
+      final opts =
+          item.options.isNotEmpty ? '\n   ${item.options.join(" | ")}' : '';
       return '  ${item.name} x${item.qty}  ₹${item.lineTotal}$opts';
     }).join('\n');
 
-    final upiLink = 'upi://pay?pa=${AppConfig.upiId}&pn=${Uri.encodeComponent(AppConfig.merchantName)}&am=${_order.total}&cu=INR';
+    final upiLink =
+        'upi://pay?pa=${AppConfig.upiId}&pn=${Uri.encodeComponent(AppConfig.merchantName)}&am=${_order.total}&cu=INR';
 
     final buffer = StringBuffer()
       ..writeln('╭─────────────────────────╮')
@@ -82,7 +114,8 @@ class _BillScreenState extends State<BillScreen> {
       ..writeln('╰─────────────────────────╯')
       ..writeln()
       ..writeln('📋 Bill #${_order.id}')
-      ..writeln('📅 ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.tryParse(_order.createdAt) ?? DateTime.now())}')
+      ..writeln(
+          '📅 ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.tryParse(_order.createdAt) ?? DateTime.now())}')
       ..writeln('👤 ${_order.customerName}')
       ..writeln('🪑 Table ${_order.tableNumber ?? "N/A"}')
       ..writeln('👨‍🍳 Served by: ${_order.takenBy ?? 'N/A'}')
@@ -122,25 +155,36 @@ class _BillScreenState extends State<BillScreen> {
   }
 
   Future<void> _sendWhatsApp(BuildContext context) async {
-    final phone = _customerPhone;
-    if (phone.isEmpty) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No customer phone number on this order')),
-        );
+    final messenger = ScaffoldMessenger.of(context);
+    String? url;
+    try {
+      // Server-rendered bill: GST breakdown + normalized wa.me link.
+      final data = await context.read<ApiClient>().fetchBillText(_order.id);
+      final link = data['wa_link'] as String?;
+      if (link != null && link.isNotEmpty) {
+        url = link;
+      } else {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('No customer phone number on this order')));
+        return;
       }
-      return;
+    } catch (_) {
+      // Backend unreachable — fall back to the locally-built bill.
+      final phone = _customerPhone;
+      if (phone.isEmpty) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('No customer phone number on this order')));
+        return;
+      }
+      url =
+          'https://wa.me/$phone?text=${Uri.encodeComponent(_buildBillText())}';
     }
-    final billText = _buildBillText();
-    final url = Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(billText)}');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open WhatsApp')),
-        );
-      }
+    final parsed = Uri.parse(url);
+    if (await canLaunchUrl(parsed)) {
+      await launchUrl(parsed, mode: LaunchMode.externalApplication);
+    } else if (context.mounted) {
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Could not open WhatsApp')));
     }
   }
 
@@ -156,15 +200,16 @@ class _BillScreenState extends State<BillScreen> {
     }
 
     setState(() => _processing = true);
+    final api = context.read<ApiClient>();
     try {
-      await context.read<ApiClient>().updateOrderStatus(
-            _order.id,
-            'collected',
-            paid: true,
-            paymentMethod: method,
-          );
+      await api.updateOrderStatus(
+        _order.id,
+        'collected',
+        paid: true,
+        paymentMethod: method,
+      );
       // Reload order
-      final updated = await context.read<ApiClient>().fetchOrder(_order.id);
+      final updated = await api.fetchOrder(_order.id);
       setState(() {
         _order = updated;
         _processing = false;
@@ -197,6 +242,16 @@ class _BillScreenState extends State<BillScreen> {
       appBar: AppBar(
         title: Text('Bill #${_order.id}'),
         actions: [
+          IconButton(
+            tooltip: 'Print receipt',
+            icon: _printing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.print),
+            onPressed: _printing ? null : _print,
+          ),
           IconButton(
             icon: const Icon(Icons.copy),
             onPressed: _copyBill,
@@ -243,7 +298,9 @@ class _BillScreenState extends State<BillScreen> {
                     _InfoRow(label: 'Bill #', value: _order.id),
                     _InfoRow(
                       label: 'Date',
-                      value: DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.tryParse(_order.createdAt) ?? DateTime.now()),
+                      value: DateFormat('dd MMM yyyy, hh:mm a').format(
+                          DateTime.tryParse(_order.createdAt) ??
+                              DateTime.now()),
                     ),
                     if (_order.customerName.isNotEmpty)
                       _InfoRow(label: 'Customer', value: _order.customerName),
@@ -256,15 +313,15 @@ class _BillScreenState extends State<BillScreen> {
                     const SizedBox(height: 8),
 
                     // Items header
-                    Row(
+                    const Row(
                       children: [
-                        const Expanded(
+                        Expanded(
                           flex: 4,
                           child: Text('ITEM',
                               style: TextStyle(
                                   fontWeight: FontWeight.w700, fontSize: 12)),
                         ),
-                        const Expanded(
+                        Expanded(
                           flex: 1,
                           child: Text('QTY',
                               textAlign: TextAlign.center,
@@ -275,7 +332,7 @@ class _BillScreenState extends State<BillScreen> {
                           flex: 2,
                           child: Text('AMOUNT',
                               textAlign: TextAlign.end,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontWeight: FontWeight.w700, fontSize: 12)),
                         ),
                       ],
@@ -309,7 +366,8 @@ class _BillScreenState extends State<BillScreen> {
                                     _formatMoney(item.lineTotal),
                                     textAlign: TextAlign.end,
                                     style: const TextStyle(
-                                        fontWeight: FontWeight.w600, fontSize: 14),
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14),
                                   ),
                                 ),
                               ],
@@ -324,6 +382,17 @@ class _BillScreenState extends State<BillScreen> {
                                     ),
                                   ),
                                 )),
+                            if (item.hsnCode != null)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 12),
+                                child: Text(
+                                  '  HSN ${item.hsnCode} • GST ${item.gstRate ?? 0}%',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
                             const SizedBox(height: 6),
                           ],
                         )),
@@ -348,6 +417,45 @@ class _BillScreenState extends State<BillScreen> {
                         ),
                       ],
                     ),
+
+                    // GST breakdown (tax-inclusive pricing)
+                    if (_cgstTotal + _sgstTotal > 0) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('GST BREAKDOWN',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5)),
+                            const SizedBox(height: 6),
+                            _TaxRow(
+                                label: 'Taxable value',
+                                value: _formatMoney(_taxableTotal)),
+                            _TaxRow(
+                                label: 'CGST', value: _formatMoney(_cgstTotal)),
+                            _TaxRow(
+                                label: 'SGST', value: _formatMoney(_sgstTotal)),
+                            for (final b in _taxByRate)
+                              _TaxRow(
+                                label: '@ ${b['rate']}%  taxable '
+                                    '${_formatMoney(b['taxable']!)}',
+                                value: 'CGST ${_formatMoney(b['cgst']!)} '
+                                    '+ SGST ${_formatMoney(b['sgst']!)}',
+                                small: true,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
 
                     if (_order.paidAmount > 0) ...[
                       const SizedBox(height: 4),
@@ -411,7 +519,8 @@ class _BillScreenState extends State<BillScreen> {
                               children: [
                                 Text(
                                   'Payment: ${_order.paymentMethod.toUpperCase()}',
-                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600),
                                 ),
                                 Text(
                                   'Status: ${isPaid ? "PAID" : "UNPAID"}',
@@ -578,6 +687,34 @@ class _InfoRow extends StatelessWidget {
         children: [
           Text(label, style: TextStyle(color: Colors.grey.shade600)),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+class _TaxRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool small;
+  const _TaxRow({required this.label, required this.value, this.small = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+        fontSize: small ? 11 : 13,
+        color: small ? Colors.black54 : null,
+        fontWeight: small ? FontWeight.w400 : FontWeight.w500);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(child: Text(label, style: style)),
+          Flexible(
+              child: Text(value,
+                  textAlign: TextAlign.end,
+                  style: style.copyWith(fontWeight: FontWeight.w600))),
         ],
       ),
     );

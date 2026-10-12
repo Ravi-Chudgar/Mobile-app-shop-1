@@ -93,10 +93,8 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                     style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 4),
                 Text(formatMoney(item.basePrice),
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(color: Theme.of(context).colorScheme.primary)),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.primary)),
                 if (item.description.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text(item.description,
@@ -125,8 +123,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
           padding: const EdgeInsets.all(16),
           child: FilledButton(
             onPressed: _valid ? _addToCart : null,
-            child: Text(
-                'Add to cart  •  ${formatMoney(_unitPrice * _qty)}'),
+            child: Text('Add to cart  •  ${formatMoney(_unitPrice * _qty)}'),
           ),
         ),
       ),
@@ -140,8 +137,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         const SizedBox(height: 20),
         Row(
           children: [
-            Text(g.group,
-                style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(g.group, style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(width: 8),
             Text(g.required ? 'Required' : 'Optional',
                 style: const TextStyle(fontSize: 12, color: Colors.grey)),
@@ -156,8 +152,8 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             contentPadding: EdgeInsets.zero,
             value: chosen,
             title: Text(c.label),
-            secondary: Text(
-                c.priceDelta == 0 ? '—' : '+${formatMoney(c.priceDelta)}'),
+            secondary:
+                Text(c.priceDelta == 0 ? '—' : '+${formatMoney(c.priceDelta)}'),
             onChanged: (_) => _toggle(g, c.label),
           );
         }),

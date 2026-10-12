@@ -114,7 +114,8 @@ class OrderDetailScreen extends StatelessWidget {
               _InfoRow(
                 icon: Icons.payment_outlined,
                 label: 'Payment',
-                value: '${_prettyPayment(o.paymentMethod)} • ${o.paymentStatus}',
+                value:
+                    '${_prettyPayment(o.paymentMethod)} • ${o.paymentStatus}',
               ),
             ],
           ),
@@ -226,7 +227,9 @@ class OrderDetailScreen extends StatelessWidget {
           ],
 
           // ── Send Bill to WhatsApp ──
-          if (o.status == 'ready' && o.customerPhone != null && o.customerPhone!.isNotEmpty) ...[
+          if (o.status == 'ready' &&
+              o.customerPhone != null &&
+              o.customerPhone!.isNotEmpty) ...[
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,

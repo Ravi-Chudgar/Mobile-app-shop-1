@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from ..aws import inventory_table
 from ..config import Config
-from ..util import ApiError
+from ..util import ApiError, plain
 
 
 def list_all():
@@ -18,6 +18,39 @@ def get(item_id):
     return resp.get("Item")
 
 
+def reorder_level_of(item):
+    """Reorder level of a stored item as a plain int (0 = alerts disabled)."""
+    if not item:
+        return 0
+    raw = item.get("reorder_level", 0)
+    try:
+        return int(plain(raw) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _coerce_reorder_level(value):
+    """Validate a client-supplied reorder_level (int >= 0)."""
+    if value is None:
+        return 0
+    if isinstance(value, bool):
+        raise ApiError("'reorder_level' must be an integer >= 0")
+    try:
+        level = int(value)
+    except (TypeError, ValueError):
+        raise ApiError("'reorder_level' must be an integer >= 0")
+    if level < 0:
+        raise ApiError("'reorder_level' must be an integer >= 0")
+    return level
+
+
+def _write(item):
+    """Persist a full item (read-modify-write keeps partial updates safe and
+    works the same on real DynamoDB and the offline stub)."""
+    inventory_table().put_item(Item=item)
+    return item
+
+
 def create(data):
     item_id = data.get("id") or f"inv-{uuid.uuid4().hex[:8]}"
     now = datetime.now(timezone.utc).isoformat()
@@ -28,12 +61,13 @@ def create(data):
         "quantity": Decimal(str(data.get("quantity", 0))),
         "cost_price": Decimal(str(data.get("cost_price", 0))),
         "unit": data.get("unit", "piece"),
+        "reorder_level": _coerce_reorder_level(data.get("reorder_level")),
         "purchase_date": purchase_date,
         "last_restocked": now,
         "created_at": now,
     }
-    inventory_table().put_item(Item=item)
-    return item
+    _write(item)
+    return plain(item)
 
 
 def update(item_id, data):
@@ -48,32 +82,16 @@ def update(item_id, data):
     for key in ("quantity", "cost_price"):
         if key in data:
             updates[key] = Decimal(str(data[key]))
+    if "reorder_level" in data:
+        updates["reorder_level"] = _coerce_reorder_level(data["reorder_level"])
 
     if not updates:
-        return existing
+        return plain(existing)
 
-    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
-
-    # 'name' is a reserved keyword in DynamoDB — use expression attribute names
-    attr_names = {}
-    expr_parts = []
-    expr_vals = {}
-    for k, v in updates.items():
-        safe = f"#{k}"
-        placeholder = f":{k}"
-        attr_names[safe] = k
-        expr_parts.append(f"{safe} = {placeholder}")
-        expr_vals[placeholder] = v
-
-    expr = "SET " + ", ".join(expr_parts)
-
-    inventory_table().update_item(
-        Key={"id": item_id},
-        UpdateExpression=expr,
-        ExpressionAttributeNames=attr_names,
-        ExpressionAttributeValues=expr_vals,
-    )
-    return get(item_id)
+    existing.update(updates)
+    existing["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _write(existing)
+    return plain(existing)
 
 
 def restock(item_id, qty):
@@ -82,15 +100,10 @@ def restock(item_id, qty):
     if not existing:
         raise ApiError("Inventory item not found", 404)
 
-    new_qty = existing.get("quantity", 0) + Decimal(str(qty))
-    now = datetime.now(timezone.utc).isoformat()
-
-    inventory_table().update_item(
-        Key={"id": item_id},
-        UpdateExpression="SET quantity = :q, last_restocked = :t",
-        ExpressionAttributeValues={":q": new_qty, ":t": now},
-    )
-    return get(item_id)
+    existing["quantity"] = existing.get("quantity", 0) + Decimal(str(qty))
+    existing["last_restocked"] = datetime.now(timezone.utc).isoformat()
+    _write(existing)
+    return plain(existing)
 
 
 def deduct_stock(item_id, qty):
@@ -103,12 +116,9 @@ def deduct_stock(item_id, qty):
     if new_qty < 0:
         raise ApiError("Insufficient stock", 400)
 
-    inventory_table().update_item(
-        Key={"id": item_id},
-        UpdateExpression="SET quantity = :q",
-        ExpressionAttributeValues={":q": new_qty},
-    )
-    return get(item_id)
+    existing["quantity"] = new_qty
+    _write(existing)
+    return plain(existing)
 
 
 def delete(item_id):
@@ -117,6 +127,33 @@ def delete(item_id):
         raise ApiError("Inventory item not found", 404)
     inventory_table().delete_item(Key={"id": item_id})
     return {"deleted": True}
+
+
+def low_stock_alerts():
+    """Items that need restocking.
+
+    An item alerts when its reorder_level is set (> 0) and its quantity has
+    dropped to (or below) that level; reorder_level = 0 disables alerts for
+    that item entirely — including when it is out of stock.
+    """
+    alerts = []
+    for raw in list_all():
+        item = plain(raw)
+        level = reorder_level_of(raw)
+        if level <= 0:
+            continue
+        qty = int(item.get("quantity", 0) or 0)
+        if qty <= level:
+            alerts.append({
+                "id": item.get("id"),
+                "item": item.get("name"),
+                "qty": qty,
+                "reorder_level": level,
+                "unit": item.get("unit", "piece"),
+                "out_of_stock": qty <= 0,
+            })
+    alerts.sort(key=lambda a: (a["qty"], -a["reorder_level"]))
+    return alerts
 
 
 def summary():

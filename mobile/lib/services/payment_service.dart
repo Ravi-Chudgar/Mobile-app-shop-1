@@ -31,7 +31,7 @@ class PaymentService {
   }
 
   static Map<String, dynamic> _googlePayConfig() {
-    final prod = AppConfig.googlePayEnvironment == 'PRODUCTION';
+    const prod = AppConfig.googlePayEnvironment == 'PRODUCTION';
     return {
       'environment': AppConfig.googlePayEnvironment,
       'apiVersion': 2,

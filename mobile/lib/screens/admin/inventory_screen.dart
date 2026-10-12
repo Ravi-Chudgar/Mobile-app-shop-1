@@ -16,6 +16,7 @@ class InventoryScreen extends StatefulWidget {
 
 class _InventoryScreenState extends State<InventoryScreen> {
   List<InventoryItem> _inventory = [];
+  List<LowStockAlert> _alerts = [];
   int _totalValue = 0;
   int _totalItems = 0;
   bool _loading = true;
@@ -36,8 +37,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
     try {
       final inventory = await api.fetchInventory();
       final summary = await api.fetchInventorySummary();
+      List<LowStockAlert> alerts = [];
+      try {
+        alerts = await api.fetchInventoryAlerts();
+      } catch (_) {
+        // Alerts are advisory — the list still works without them.
+      }
       setState(() {
         _inventory = inventory;
+        _alerts = alerts;
         _totalValue = summary['total_value'] as int? ?? 0;
         _totalItems = summary['total_items'] as int? ?? 0;
         _loading = false;
@@ -57,6 +65,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       builder: (_) => const _AddEditItemDialog(),
     );
     if (result == null) return;
+    if (!mounted) return;
     final api = context.read<ApiClient>();
     try {
       await api.createInventoryItem(result);
@@ -75,6 +84,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       builder: (_) => _AddEditItemDialog(item: item),
     );
     if (result == null) return;
+    if (!mounted) return;
     final api = context.read<ApiClient>();
     try {
       await api.updateInventoryItem(item.id, result);
@@ -118,6 +128,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       ),
     );
     if (result == null) return;
+    if (!mounted) return;
     final api = context.read<ApiClient>();
     try {
       await api.restockItem(item.id, result);
@@ -150,6 +161,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       ),
     );
     if (confirm != true) return;
+    if (!mounted) return;
     final api = context.read<ApiClient>();
     try {
       await api.deleteInventoryItem(item.id);
@@ -192,82 +204,84 @@ class _InventoryScreenState extends State<InventoryScreen> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Inventory Management',
-                  style: Theme.of(context)
-                      .textTheme
-                      .headlineMedium
-                      ?.copyWith(fontWeight: FontWeight.w800),
-                ),
-              ),
-              FilledButton.icon(
-                onPressed: _addItem,
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add Item'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _MetricCard(
-                  title: 'Total Items',
-                  value: '$_totalItems',
-                  emoji: '📦',
-                  colors: const [Color(0xFF6366F1), Color(0x818CF8)],
-                  subtitle: 'in stock',
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _MetricCard(
-                  title: 'Total Value',
-                  value: '₹$_totalValue',
-                  emoji: '💰',
-                  colors: const [Color(0xFF10B981), Color(0xFF059669)],
-                  subtitle: 'cost basis',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Items (${_inventory.length})',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          if (_inventory.isEmpty)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: Center(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
                   child: Text(
-                    'No inventory items yet.\nTap "Add Item" to get started.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey),
+                    'Inventory Management',
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                 ),
-              ),
-            )
-          else
-            ..._inventory.map((item) => _InventoryTile(
-                  item: item,
-                  onEdit: () => _editItem(item),
-                  onRestock: () => _restockItem(item),
-                  onDelete: () => _deleteItem(item),
-                  formatDate: _formatDate,
-                )),
-        ],
-      ),
+                FilledButton.icon(
+                  onPressed: _addItem,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add Item'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _MetricCard(
+                    title: 'Total Items',
+                    value: '$_totalItems',
+                    emoji: '📦',
+                    subtitle: 'in stock',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _MetricCard(
+                    title: 'Total Value',
+                    value: '₹$_totalValue',
+                    emoji: '💰',
+                    subtitle: 'cost basis',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (_alerts.isNotEmpty) ...[
+              _LowStockBanner(alerts: _alerts),
+              const SizedBox(height: 16),
+            ],
+            Text(
+              'Items (${_inventory.length})',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            if (_inventory.isEmpty)
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(
+                    child: Text(
+                      'No inventory items yet.\nTap "Add Item" to get started.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                ),
+              )
+            else
+              ..._inventory.map((item) => _InventoryTile(
+                    item: item,
+                    onEdit: () => _editItem(item),
+                    onRestock: () => _restockItem(item),
+                    onDelete: () => _deleteItem(item),
+                    formatDate: _formatDate,
+                  )),
+          ],
+        ),
       ),
     );
   }
@@ -277,13 +291,11 @@ class _MetricCard extends StatelessWidget {
   final String title;
   final String value;
   final String emoji;
-  final List<Color> colors;
   final String subtitle;
   const _MetricCard({
     required this.title,
     required this.value,
     required this.emoji,
-    required this.colors,
     required this.subtitle,
   });
 
@@ -303,8 +315,7 @@ class _MetricCard extends StatelessWidget {
                         .titleSmall
                         ?.copyWith(fontWeight: FontWeight.w600)),
                 const Spacer(),
-                Text(emoji,
-                    style: const TextStyle(fontSize: 24, height: 0)),
+                Text(emoji, style: const TextStyle(fontSize: 24, height: 0)),
               ],
             ),
             const SizedBox(height: 8),
@@ -346,7 +357,8 @@ class _InventoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lowStock = item.quantity <= 10;
+    final lowStock = item.isLowStock;
+    final outOfStock = item.isOutOfStock;
     final scheme = Theme.of(context).colorScheme;
 
     return Card(
@@ -355,12 +367,13 @@ class _InventoryTile extends StatelessWidget {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor:
-                  lowStock ? scheme.errorContainer : scheme.primaryContainer,
+              backgroundColor: lowStock || outOfStock
+                  ? scheme.errorContainer
+                  : scheme.primaryContainer,
               child: Text(
                 item.name.substring(0, 1).toUpperCase(),
                 style: TextStyle(
-                  color: lowStock
+                  color: lowStock || outOfStock
                       ? scheme.onErrorContainer
                       : scheme.onPrimaryContainer,
                   fontWeight: FontWeight.w700,
@@ -372,9 +385,29 @@ class _InventoryTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    item.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      if (outOfStock)
+                        _StatusPill(
+                          label: 'OUT',
+                          color: scheme.error,
+                          background: scheme.errorContainer,
+                        )
+                      else if (lowStock)
+                        _StatusPill(
+                          label: item.hasReorderLevel
+                              ? 'LOW ${item.quantity}/${item.reorderLevel}'
+                              : 'LOW',
+                          color: scheme.error,
+                          background: scheme.errorContainer,
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Row(
@@ -382,29 +415,22 @@ class _InventoryTile extends StatelessWidget {
                       Text(
                         '${item.quantity} ${item.unit}',
                         style: TextStyle(
-                          color:
-                              lowStock ? scheme.error : scheme.onSurfaceVariant,
+                          color: lowStock || outOfStock
+                              ? scheme.error
+                              : scheme.onSurfaceVariant,
                           fontSize: 13,
-                          fontWeight:
-                              lowStock ? FontWeight.w600 : FontWeight.normal,
+                          fontWeight: lowStock || outOfStock
+                              ? FontWeight.w600
+                              : FontWeight.normal,
                         ),
                       ),
-                      if (lowStock) ...[
+                      if (item.hasReorderLevel) ...[
                         const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: scheme.errorContainer,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'LOW',
-                            style: TextStyle(
-                              color: scheme.onErrorContainer,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                            ),
+                        Text(
+                          'reorder at ${item.reorderLevel}',
+                          style: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            fontSize: 12,
                           ),
                         ),
                       ],
@@ -471,6 +497,7 @@ class _AddEditItemDialogState extends State<_AddEditItemDialog> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _qtyCtrl;
   late final TextEditingController _costCtrl;
+  late final TextEditingController _reorderCtrl;
   late String _unit;
   late DateTime _purchaseDate;
 
@@ -484,6 +511,8 @@ class _AddEditItemDialogState extends State<_AddEditItemDialog> {
         text: isEditing ? widget.item!.quantity.toString() : '0');
     _costCtrl = TextEditingController(
         text: isEditing ? widget.item!.costPrice.toString() : '');
+    _reorderCtrl = TextEditingController(
+        text: isEditing ? widget.item!.reorderLevel.toString() : '0');
     _unit = widget.item?.unit ?? 'piece';
 
     if (isEditing && widget.item!.purchaseDate != null) {
@@ -502,6 +531,7 @@ class _AddEditItemDialogState extends State<_AddEditItemDialog> {
     _nameCtrl.dispose();
     _qtyCtrl.dispose();
     _costCtrl.dispose();
+    _reorderCtrl.dispose();
     super.dispose();
   }
 
@@ -513,6 +543,7 @@ class _AddEditItemDialogState extends State<_AddEditItemDialog> {
       lastDate: DateTime.now(),
     );
     if (picked == null) return;
+    if (!mounted) return;
 
     final time = await showTimePicker(
       context: context,
@@ -580,7 +611,8 @@ class _AddEditItemDialogState extends State<_AddEditItemDialog> {
                         border: OutlineInputBorder(),
                       ),
                       items: _units
-                          .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                          .map(
+                              (u) => DropdownMenuItem(value: u, child: Text(u)))
                           .toList(),
                       onChanged: (v) {
                         if (v != null) setState(() => _unit = v);
@@ -601,6 +633,25 @@ class _AddEditItemDialogState extends State<_AddEditItemDialog> {
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'Required';
                   if (int.tryParse(v) == null) return 'Must be a number';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _reorderCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Reorder level',
+                  hintText: 'e.g. 10',
+                  helperText:
+                      'Low-stock alert when qty drops to this. 0 = off.',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Required';
+                  final n = int.tryParse(v.trim());
+                  if (n == null) return 'Must be a number';
+                  if (n < 0) return 'Must be 0 or more';
                   return null;
                 },
               ),
@@ -633,6 +684,7 @@ class _AddEditItemDialogState extends State<_AddEditItemDialog> {
                 'quantity': int.parse(_qtyCtrl.text),
                 'cost_price': int.parse(_costCtrl.text),
                 'unit': _unit,
+                'reorder_level': int.parse(_reorderCtrl.text.trim()),
                 'purchase_date': _purchaseDate.toUtc().toIso8601String(),
               });
             }
@@ -664,6 +716,90 @@ class _ErrorView extends StatelessWidget {
           const SizedBox(height: 12),
           OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
         ],
+      ),
+    );
+  }
+}
+
+/// Header banner listing items that hit their reorder level (or sold out).
+class _LowStockBanner extends StatelessWidget {
+  final List<LowStockAlert> alerts;
+  const _LowStockBanner({required this.alerts});
+
+  @override
+  Widget build(BuildContext context) {
+    final outOfStock = alerts.where((a) => a.outOfStock).length;
+    final names = alerts.take(3).map((a) => a.item).join(', ');
+    final more = alerts.length > 3 ? ' +${alerts.length - 3} more' : '';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.amber.shade400),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade800),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${alerts.length} low-stock item${alerts.length == 1 ? '' : 's'}'
+                  '${outOfStock > 0 ? ' ($outOfStock out of stock)' : ''}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$names$more',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Small pill used for LOW / OUT badges on inventory rows.
+class _StatusPill extends StatelessWidget {
+  final String label;
+  final Color color;
+  final Color background;
+  const _StatusPill({
+    required this.label,
+    required this.color,
+    required this.background,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

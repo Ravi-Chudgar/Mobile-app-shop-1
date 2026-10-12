@@ -55,8 +55,8 @@ class _RecommendationsStripState extends State<RecommendationsStrip> {
       children: [
         Row(
           children: [
-            Icon(Icons.auto_awesome, size: 16,
-                color: Theme.of(context).colorScheme.primary),
+            Icon(Icons.auto_awesome,
+                size: 16, color: Theme.of(context).colorScheme.primary),
             const SizedBox(width: 6),
             Text('You might also like',
                 style: Theme.of(context).textTheme.labelLarge),
@@ -131,8 +131,8 @@ class _RecommendationsStripState extends State<RecommendationsStrip> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.info_outline, size: 18,
-                color: Theme.of(context).colorScheme.error),
+            Icon(Icons.info_outline,
+                size: 18, color: Theme.of(context).colorScheme.error),
             const SizedBox(height: 6),
             Text(
               _error ?? 'Suggestions unavailable',
@@ -175,7 +175,8 @@ class _RecommendationsStripState extends State<RecommendationsStrip> {
           width: 240,
           child: Row(
             children: [
-              MenuImage(url: s.item.imageUrl, width: 84, height: double.infinity),
+              MenuImage(
+                  url: s.item.imageUrl, width: 84, height: double.infinity),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(8),
@@ -185,12 +186,13 @@ class _RecommendationsStripState extends State<RecommendationsStrip> {
                       Text(s.item.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style:
-                              const TextStyle(fontWeight: FontWeight.w600)),
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
                       const SizedBox(height: 2),
                       Expanded(
                         child: Text(
-                          s.reason.isEmpty ? 'Goes well with your order' : s.reason,
+                          s.reason.isEmpty
+                              ? 'Goes well with your order'
+                              : s.reason,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall,
@@ -221,8 +223,8 @@ class _RecommendationsStripState extends State<RecommendationsStrip> {
     final messenger = ScaffoldMessenger.of(context);
     // Required multi-choice groups have no obvious default — let staff pick.
     if (!s.safeToAutopick) {
-      Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => ItemDetailScreen(item: s.item)));
+      Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => ItemDetailScreen(item: s.item)));
       return;
     }
     cart.add(s.item, List.of(s.defaultOptions), 1);

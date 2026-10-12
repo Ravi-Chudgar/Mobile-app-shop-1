@@ -1,11 +1,11 @@
 {
-    "name": "cafe_app",
-    "short_name": "cafe_app",
+    "name": "Cafe POS",
+    "short_name": "Cafe POS",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#4E3626",
+    "theme_color": "#4E3626",
+    "description": "Offline-first cafe point of sale: GST billing, KOT printing, QR self-ordering, inventory and Tally/GST export.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

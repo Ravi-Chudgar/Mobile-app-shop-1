@@ -70,6 +70,7 @@ class _StaffScreenState extends State<StaffScreen> {
       ),
     );
     if (confirm != true) return;
+    if (!mounted) return;
     try {
       await context.read<ApiClient>().removeStaff(s.username);
       await _load();
@@ -92,7 +93,9 @@ class _StaffScreenState extends State<StaffScreen> {
         dt.year == now.year && dt.month == now.month && dt.day == now.day;
     final hh = dt.hour.toString().padLeft(2, '0');
     final mm = dt.minute.toString().padLeft(2, '0');
-    return sameDay ? 'Present today • $hh:$mm' : 'Last login ${dt.day}/${dt.month} $hh:$mm';
+    return sameDay
+        ? 'Present today • $hh:$mm'
+        : 'Last login ${dt.day}/${dt.month} $hh:$mm';
   }
 
   Future<void> _addStaffDialog() async {
@@ -129,9 +132,11 @@ class _StaffScreenState extends State<StaffScreen> {
       ),
     );
     if (ok == true && user.text.trim().isNotEmpty) {
+      if (!mounted) return;
       try {
-        await context.read<ApiClient>().createStaff(
-            user.text.trim(), pass.text, name.text.trim());
+        await context
+            .read<ApiClient>()
+            .createStaff(user.text.trim(), pass.text, name.text.trim());
         await _load();
       } catch (e) {
         _snack('$e');
@@ -173,8 +178,7 @@ class _StaffScreenState extends State<StaffScreen> {
                           horizontal: 16, vertical: 12),
                       child: Row(
                         children: [
-                          const Icon(Icons.hourglass_top,
-                              color: Colors.orange),
+                          const Icon(Icons.hourglass_top, color: Colors.orange),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -185,8 +189,7 @@ class _StaffScreenState extends State<StaffScreen> {
                                         fontWeight: FontWeight.w600)),
                                 Text('@${s.username}',
                                     style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black54)),
+                                        fontSize: 12, color: Colors.black54)),
                               ],
                             ),
                           ),
@@ -202,15 +205,14 @@ class _StaffScreenState extends State<StaffScreen> {
             ],
             const Padding(
               padding: EdgeInsets.fromLTRB(4, 8, 4, 4),
-              child: Text('Team',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
+              child:
+                  Text('Team', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
             ...active.map((s) => Card(
                   child: ListTile(
                     leading: CircleAvatar(
-                      child: Text(s.name.isNotEmpty
-                          ? s.name[0].toUpperCase()
-                          : '?'),
+                      child: Text(
+                          s.name.isNotEmpty ? s.name[0].toUpperCase() : '?'),
                     ),
                     title: Row(
                       children: [
@@ -218,8 +220,8 @@ class _StaffScreenState extends State<StaffScreen> {
                         const SizedBox(width: 8),
                         if (s.isOwner)
                           const Chip(
-                            label: Text('Owner',
-                                style: TextStyle(fontSize: 11)),
+                            label:
+                                Text('Owner', style: TextStyle(fontSize: 11)),
                             visualDensity: VisualDensity.compact,
                           ),
                       ],

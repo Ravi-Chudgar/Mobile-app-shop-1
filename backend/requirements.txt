@@ -5,3 +5,5 @@ PyJWT==2.9.0
 passlib==1.7.4
 langchain-core==1.6.0
 langchain-ollama==1.1.0
+qrcode[pil]==8.2
+redis

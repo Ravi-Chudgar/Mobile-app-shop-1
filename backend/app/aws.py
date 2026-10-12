@@ -6,6 +6,7 @@ AWS in production (variable unset)."""
 import os
 import boto3
 
+from . import tenancy
 from .config import Config
 
 
@@ -29,21 +30,43 @@ def s3():
     return boto3.client("s3", **_kwargs())
 
 
+# --------------------------------------------------------------------------- #
+# Tenant-scoped tables: the name depends on the tenant that owns the current
+# request/script (app/tenancy.py). Repositories import these accessors and
+# need no tenant awareness of their own.
+# --------------------------------------------------------------------------- #
+
 def menu_table():
-    return dynamodb().Table(Config.MENU_TABLE)
+    return dynamodb().Table(tenancy.tenant_table_name(Config.MENU_TABLE))
 
 
 def orders_table():
-    return dynamodb().Table(Config.ORDERS_TABLE)
+    return dynamodb().Table(tenancy.tenant_table_name(Config.ORDERS_TABLE))
 
 
 def staff_table():
-    return dynamodb().Table(Config.STAFF_TABLE)
+    return dynamodb().Table(tenancy.tenant_table_name(Config.STAFF_TABLE))
 
 
 def tables_table():
-    return dynamodb().Table(Config.TABLES_TABLE)
+    return dynamodb().Table(tenancy.tenant_table_name(Config.TABLES_TABLE))
 
 
 def inventory_table():
-    return dynamodb().Table(Config.INVENTORY_TABLE)
+    return dynamodb().Table(tenancy.tenant_table_name(Config.INVENTORY_TABLE))
+
+
+def loyalty_table_name():
+    """Physical name of the current tenant's loyalty table (the repository
+    creates it lazily, so infra needs the name too)."""
+    return tenancy.tenant_table_name(Config.LOYALTY_TABLE)
+
+
+def loyalty_table():
+    return dynamodb().Table(loyalty_table_name())
+
+
+def tenants_table():
+    """GLOBAL tenant registry (`cafe_tenants`, PK slug) — deliberately not
+    tenant-scoped: it is the map from slug to tenant."""
+    return dynamodb().Table(Config.TENANTS_TABLE)

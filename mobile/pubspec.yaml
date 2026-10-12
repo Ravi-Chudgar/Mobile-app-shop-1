@@ -1,5 +1,5 @@
 name: cafe_app
-description: Cafe ordering app (customer + admin) for the Flask/Floci backend.
+description: "Cafe POS — GST billing, KOT, QR self-ordering, inventory and Tally export for cafes."
 publish_to: "none"
 version: 1.0.0+1
 
@@ -19,11 +19,46 @@ dependencies:
   pay: ^3.3.0
   url_launcher: ^6.2.0
   flutter_local_notifications: ^18.0.1
+  # Offline-first sync: durable mutation queue + online/offline trigger.
+  shared_preferences: ^2.3.0
+  connectivity_plus: ^6.0.0
+  usb_serial: ^0.5.2
+  print_bluetooth_thermal: ^1.2.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.6
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  macos:
+    generate: true
+  windows:
+    generate: true
+  image_path: assets/images/logo.png
+  adaptive_icon_background: "#4E3626"
+  adaptive_icon_foreground: assets/images/logo_foreground.png
+  web:
+    generate: true
+    image_path: assets/images/logo.png
+    background_color: "#4E3626"
+
+flutter_native_splash:
+  color: "#4E3626"
+  image: assets/images/logo.png
+  android_12:
+    color: "#4E3626"
+    image: assets/images/logo.png
+  android: true
+  ios: true
+  web: true
+  web_image_mode: contain

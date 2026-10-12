@@ -1,7 +1,6 @@
 // Generates investor-demo screenshots (goldens) of the real app UI with real
 // fonts loaded. Run with: flutter test test/generate_demo_shots_test.dart --update-goldens
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,8 +20,7 @@ const _fontsDir = '/opt/aquaos/flutter/bin/cache/artifacts/material_fonts';
 
 Future<void> _loadFonts() async {
   Future<void> face(String family, String path) async {
-    final data =
-        File(path).readAsBytesSync();
+    final data = File(path).readAsBytesSync();
     final loader = FontLoader(family)
       ..addFont(Future.value(ByteData.view(data.buffer)));
     await loader.load();
@@ -87,8 +85,8 @@ void main() {
       MaterialApp(theme: buildAppTheme(), home: const LoginScreen()),
     );
     await tester.pumpAndSettle();
-    await expectLater(find.byType(MaterialApp),
-        matchesGoldenFile('goldens/login.png'));
+    await expectLater(
+        find.byType(MaterialApp), matchesGoldenFile('goldens/login.png'));
   });
 
   Widget shell(ApiClient api, AuthState auth, String title, Widget body) =>
@@ -100,8 +98,8 @@ void main() {
         child: MaterialApp(
           theme: buildAppTheme(),
           home: Scaffold(
-            appBar: ShellAppBar(
-                title: title, userName: 'Owner', onLogout: () {}),
+            appBar:
+                ShellAppBar(title: title, userName: 'Owner', onLogout: () {}),
             body: body,
           ),
         ),
@@ -114,8 +112,8 @@ void main() {
     await tester.pumpWidget(shell(api, auth, 'Sales', const DashboardScreen()));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await expectLater(find.byType(MaterialApp),
-        matchesGoldenFile('goldens/dashboard.png'));
+    await expectLater(
+        find.byType(MaterialApp), matchesGoldenFile('goldens/dashboard.png'));
   });
 
   testWidgets('owner staff management', (tester) async {
@@ -125,7 +123,7 @@ void main() {
     await tester.pumpWidget(shell(api, auth, 'Staff', const StaffScreen()));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await expectLater(find.byType(MaterialApp),
-        matchesGoldenFile('goldens/staff.png'));
+    await expectLater(
+        find.byType(MaterialApp), matchesGoldenFile('goldens/staff.png'));
   });
 }

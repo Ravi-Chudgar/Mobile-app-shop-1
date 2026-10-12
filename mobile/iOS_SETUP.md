@@ -28,7 +28,7 @@ flutter pub get
 ## 3. Allow local HTTP (important)
 
 iOS blocks plain `http://` by default (App Transport Security). Your dev backend
-is `http://localhost:5000`, so add an exception. Open
+is `http://localhost:9999`, so add an exception. Open
 `ios/Runner/Info.plist` and add this inside the top-level `<dict>`:
 
 ```xml
@@ -48,7 +48,7 @@ for development. In production you'd serve the API over HTTPS and remove this.
 
 ```bash
 open -a Simulator
-flutter run              # config.dart already targets http://localhost:5000 on iOS
+flutter run              # config.dart already targets http://localhost:9999 on iOS
 ```
 
 **Physical iPhone** (needs your Mac's LAN IP, since the phone can't see the Mac's
@@ -56,7 +56,7 @@ localhost):
 
 ```bash
 ipconfig getifaddr en0   # e.g. 192.168.1.50
-flutter run --dart-define=API_BASE_URL=http://192.168.1.50:5000
+flutter run --dart-define=API_BASE_URL=http://192.168.1.50:9999
 ```
 
 Your Mac and iPhone must be on the same Wi-Fi, and the backend must bind to all

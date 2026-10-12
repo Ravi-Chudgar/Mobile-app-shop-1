@@ -34,8 +34,16 @@ def free_table(number):
 def add_table():
     data = request.get_json(silent=True) or {}
     if data.get("number") is not None:
-        return jsonify(tables_repo.add(data["number"])), 201
+        return jsonify(tables_repo.add(data["number"], layout=data)), 201
     return jsonify(tables_repo.add_next()), 201
+
+
+@bp.put("/admin/tables/<number>/layout")
+@owner_required
+def update_table_layout(number):
+    """Owner-only floor-map layout: zone + position/size (x, y, w, h) + shape."""
+    data = request.get_json(silent=True) or {}
+    return jsonify(tables_repo.update_layout(number, data))
 
 
 @bp.delete("/admin/tables/<number>")

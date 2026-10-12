@@ -5,6 +5,9 @@ import 'package:provider/provider.dart';
 import '../../models/cart.dart';
 import '../../models/order.dart';
 import '../../services/api_client.dart';
+import '../../services/offline/offline.dart';
+import '../../services/printer_models.dart';
+import '../../services/printing_service.dart';
 import '../../state/auth_state.dart';
 import '../../state/cart_state.dart';
 import '../../util/money.dart';
@@ -34,14 +37,25 @@ class _StaffOrdersScreenState extends State<StaffOrdersScreen> {
     super.initState();
     _load();
     _refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (mounted && !_loading) _load();
+      // Poll only while online — offline the banner/pending cards are the
+      // source of truth and each attempt would just burn a 5s timeout.
+      if (mounted && !_loading && ConnectivityMonitor.instance.isOnline.value) {
+        _load();
+      }
     });
+    // Re-render when queued offline orders change (queued, synced, retried).
+    OfflineQueue.instance.pendingCount.addListener(_onPendingChanged);
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    OfflineQueue.instance.pendingCount.removeListener(_onPendingChanged);
     super.dispose();
+  }
+
+  void _onPendingChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _load() async {
@@ -49,8 +63,17 @@ class _StaffOrdersScreenState extends State<StaffOrdersScreen> {
       _loading = true;
       _error = null;
     });
+    if (!ConnectivityMonitor.instance.isOnline.value) {
+      // Offline: keep whatever orders we already have and just surface the
+      // pending queue (rendered from OfflineQueue below).
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    final api = context.read<ApiClient>();
     try {
-      final orders = await context.read<ApiClient>().fetchOrders();
+      // Replay anything queued offline first, so the server list includes it.
+      await OfflineQueue.instance.flush(api);
+      final orders = await api.fetchOrders();
       if (!mounted) return;
       setState(() {
         _orders = orders;
@@ -59,7 +82,9 @@ class _StaffOrdersScreenState extends State<StaffOrdersScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = isConnectivityError(e)
+            ? 'Cannot reach the server — showing last known orders'
+            : '$e';
         _loading = false;
       });
     }
@@ -80,14 +105,36 @@ class _StaffOrdersScreenState extends State<StaffOrdersScreen> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
   static const _nextLabel = {
     'ready': 'Serve to Customer',
   };
+
+  /// Manual KOT reprint from the staff order queue.
+  Future<void> _printKot(CafeOrder order) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final api = context.read<ApiClient>();
+    try {
+      final result = await PrintingService.instance.printKot(order.id, api);
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: Colors.green,
+        content: Text('✓ $result'),
+      ));
+    } on PrinterException catch (e) {
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: Colors.red.shade700,
+        content: Text('KOT print failed: ${e.message}'),
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: Colors.red.shade700,
+        content: Text('KOT print failed: $e'),
+      ));
+    }
+  }
 
   Future<void> _reopenAndAdd(CafeOrder order) async {
     final confirmed = await showDialog<bool>(
@@ -113,6 +160,7 @@ class _StaffOrdersScreenState extends State<StaffOrdersScreen> {
     if (confirmed != true || !mounted) return;
     try {
       await context.read<ApiClient>().reopenOrder(order.id);
+      if (!mounted) return;
       context.read<CartState>().tablesChanged();
       await _load();
       if (!mounted) return;
@@ -128,8 +176,7 @@ class _StaffOrdersScreenState extends State<StaffOrdersScreen> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
@@ -155,8 +202,7 @@ class _StaffOrdersScreenState extends State<StaffOrdersScreen> {
       await _load();
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(
-          content: Text(
-              'Added ${added.length} item(s) to Order #${order.id} • '
+          content: Text('Added ${added.length} item(s) to Order #${order.id} • '
               'new total ${formatMoney(updated.total)}')));
     } catch (e) {
       if (!mounted) return;
@@ -252,6 +298,42 @@ class _StaffOrdersScreenState extends State<StaffOrdersScreen> {
             ),
           ),
 
+          // ── Queued offline orders (not yet on the server) ──
+          ValueListenableBuilder<int>(
+            valueListenable: OfflineQueue.instance.pendingCount,
+            builder: (context, count, _) {
+              if (count == 0) return const SizedBox.shrink();
+              final pending = OfflineQueue.instance.pendingOrderOps;
+              if (pending.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.cloud_off_rounded,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.error),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Waiting to sync ($count)',
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelLarge
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.error),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    for (final op in pending) _PendingOrderCard(op: op),
+                  ],
+                ),
+              );
+            },
+          ),
+
           // ── Orders list ──
           Expanded(
             child: visible.isEmpty
@@ -276,6 +358,7 @@ class _StaffOrdersScreenState extends State<StaffOrdersScreen> {
                         onAdvance: () => _advance(o),
                         onAddItem: () => _addItemsToOrder(o),
                         onReopen: () => _reopenAndAdd(o),
+                        onPrintKot: () => _printKot(o),
                       );
                     },
                   ),
@@ -297,6 +380,7 @@ class _OrderCard extends StatelessWidget {
   final VoidCallback onAdvance;
   final VoidCallback onAddItem;
   final VoidCallback onReopen;
+  final VoidCallback onPrintKot;
 
   const _OrderCard({
     required this.order,
@@ -307,6 +391,7 @@ class _OrderCard extends StatelessWidget {
     required this.onAdvance,
     required this.onAddItem,
     required this.onReopen,
+    required this.onPrintKot,
   });
 
   @override
@@ -329,162 +414,171 @@ class _OrderCard extends StatelessWidget {
           }
         },
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header: ID, status, table, total ──
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            color: statusColor.withValues(alpha: 0.08),
-            child: Row(
-              children: [
-                Text('#${o.id}',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 15)),
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: statusColor,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(o.status,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Header: ID, status, table, total ──
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              color: statusColor.withValues(alpha: 0.08),
+              child: Row(
+                children: [
+                  Text('#${o.id}',
                       style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600)),
-                ),
-                if (o.tableNumber != null) ...[
-                  const SizedBox(width: 6),
+                          fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(width: 8),
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: Colors.orange.shade100,
+                      color: statusColor,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text('T${o.tableNumber}',
-                        style: TextStyle(
+                    child: Text(o.status,
+                        style: const TextStyle(
+                            color: Colors.white,
                             fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.orange.shade800)),
+                            fontWeight: FontWeight.w600)),
                   ),
-                ],
-                const Spacer(),
-                Text(formatMoney(o.total),
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 15)),
-              ],
-            ),
-          ),
-
-          // ── Customer + staff ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-            child: Row(
-              children: [
-                Icon(Icons.person_outline,
-                    size: 14, color: scheme.onSurfaceVariant),
-                const SizedBox(width: 4),
-                Text(o.customerName,
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w500)),
-                if (o.takenBy != null && o.takenBy!.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  Icon(Icons.storefront_outlined,
-                      size: 12, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 3),
-                  Text(o.takenBy!,
-                      style: TextStyle(
-                          fontSize: 12, color: scheme.onSurfaceVariant)),
-                ],
-              ],
-            ),
-          ),
-
-          // ── Items ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final line in o.items)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Text(
-                      '${line.qty}× ${line.name}'
-                      '${line.options.isEmpty ? '' : ' (${line.options.join(', ')})'}',
-                      style: TextStyle(
-                          fontSize: 13, color: scheme.onSurfaceVariant),
+                  if (o.tableNumber != null) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text('T${o.tableNumber}',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.orange.shade800)),
                     ),
-                  ),
-              ],
-            ),
-          ),
-
-          // ── Notes ──
-          if (o.notes.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  o.notes,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                    color: Colors.amber.shade900,
-                  ),
-                ),
+                  ],
+                  const Spacer(),
+                  Text(formatMoney(o.total),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15)),
+                ],
               ),
             ),
 
-          // ── Actions ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (canEdit)
+            // ── Customer + staff ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+              child: Row(
+                children: [
+                  Icon(Icons.person_outline,
+                      size: 14, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 4),
+                  Text(o.customerName,
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w500)),
+                  if (o.takenBy != null && o.takenBy!.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Icon(Icons.storefront_outlined,
+                        size: 12, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 3),
+                    Text(o.takenBy!,
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                  ],
+                ],
+              ),
+            ),
+
+            // ── Items ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final line in o.items)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Text(
+                        '${line.qty}× ${line.name}'
+                        '${line.options.isEmpty ? '' : ' (${line.options.join(', ')})'}',
+                        style: TextStyle(
+                            fontSize: 13, color: scheme.onSurfaceVariant),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // ── Notes ──
+            if (o.notes.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    o.notes,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.amber.shade900,
+                    ),
+                  ),
+                ),
+              ),
+
+            // ── Actions ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.end,
+                children: [
                   OutlinedButton.icon(
-                    onPressed: onAddItem,
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add'),
+                    onPressed: onPrintKot,
+                    icon: const Icon(Icons.print, size: 16),
+                    label: const Text('Print KOT'),
                     style: OutlinedButton.styleFrom(
                       visualDensity: VisualDensity.compact,
                     ),
                   ),
-                if (canEdit && canAdvance) const SizedBox(width: 8),
-                if (canAdvance)
-                  o.status == 'ready'
-                      ? FilledButton.icon(
-                          onPressed: onAdvance,
-                          icon: const Icon(Icons.shopping_bag, size: 16),
-                          label: Text(nextLabel!),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        )
-                      : FilledButton.tonal(
-                          onPressed: onAdvance,
-                          child: Text(nextLabel!),
-                        )
-                else if (canEdit && o.status == 'collected')
-                  FilledButton.tonal(
-                    onPressed: onReopen,
-                    child: const Text('Reopen'),
-                  ),
-              ],
+                  if (canEdit)
+                    OutlinedButton.icon(
+                      onPressed: onAddItem,
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Add'),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  if (canAdvance)
+                    o.status == 'ready'
+                        ? FilledButton.icon(
+                            onPressed: onAdvance,
+                            icon: const Icon(Icons.shopping_bag, size: 16),
+                            label: Text(nextLabel!),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          )
+                        : FilledButton.tonal(
+                            onPressed: onAdvance,
+                            child: Text(nextLabel!),
+                          )
+                  else if (canEdit && o.status == 'collected')
+                    FilledButton.tonal(
+                      onPressed: onReopen,
+                      child: const Text('Reopen'),
+                    ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -504,7 +598,7 @@ class _StatusBadge extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.2),
+            color: color.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -525,6 +619,97 @@ class _StatusBadge extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A card for an order captured offline: shown with its local id until the
+/// server assigns the real one on sync.
+class _PendingOrderCard extends StatelessWidget {
+  final PendingOp op;
+  const _PendingOrderCard({required this.op});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final payload = op.payload;
+    final table = payload['table_number'];
+    final items = payload['items'];
+    final lineCount = items is List ? items.length : 0;
+    final customer = payload['customer'];
+    final customerName =
+        customer is Map ? '${customer['name'] ?? 'Guest'}' : 'Guest';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: scheme.errorContainer.withValues(alpha: 0.35),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            Icon(Icons.hourglass_top_rounded,
+                size: 18, color: scheme.onErrorContainer),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(op.localId,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15)),
+                      if (table != null) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text('T$table',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.orange.shade800)),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$customerName • $lineCount line(s) • not on the server yet',
+                    style:
+                        TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                  ),
+                  if (op.lastError != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      op.lastError!,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.error),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: () {
+                final api = context.read<ApiClient>();
+                unawaited(OfflineQueue.instance.flush(api).then((_) {
+                  // The list refreshes on its 3s poll; the card disappears
+                  // as soon as pendingCount drops.
+                }));
+              },
+              child: const Text('Retry now'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

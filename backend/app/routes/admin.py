@@ -1,11 +1,19 @@
 """Owner-only management: sales reports, staff approval, menu CRUD, inventory.
-Every route requires an owner JWT."""
+Most routes require an owner JWT.
+
+Phase 4 (accounting bridge): the read-only GET report routes the CA needs
+(/reports/daily, /reports/z, /billing) also accept the `cafe_ca` role via
+owner_or_ca. Every handler in that allow-list is registered with @bp.get —
+no mutating route accepts cafe_ca, and ca_guard.py refuses non-GET requests
+carrying a cafe_ca token globally.
+"""
+import calendar
 import uuid
 from datetime import datetime, timezone
 
 from flask import Blueprint, request, jsonify
 
-from ..auth import owner_required
+from ..auth import VALID_ROLES, owner_or_ca, owner_required
 from ..aws import s3
 from ..config import Config
 from ..repositories import menu as menu_repo
@@ -13,7 +21,8 @@ from ..repositories import orders as orders_repo
 from ..repositories import reports as reports_repo
 from ..repositories import staff as staff_repo
 from ..repositories import inventory as inventory_repo
-from ..util import ApiError
+from ..tenancy import tenant_prefix
+from ..util import ApiError, plain
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -21,10 +30,22 @@ bp = Blueprint("admin", __name__, url_prefix="/admin")
 # ---- Sales reports ---------------------------------------------------------
 
 @bp.get("/reports/daily")
-@owner_required
+@owner_or_ca  # read-only report: owner OR cafe_ca (Phase 4)
 def daily_report():
     date = request.args.get("date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return jsonify(reports_repo.daily_summary(date))
+
+
+@bp.get("/reports/z")
+@owner_or_ca  # read-only report: owner OR cafe_ca (Phase 4)
+def z_report():
+    """Day-end Z-report: totals, GST breakup, sales by payment method."""
+    date = request.args.get("date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise ApiError("'date' must be YYYY-MM-DD")
+    return jsonify(reports_repo.z_report(date))
 
 
 @bp.get("/reports/range")
@@ -40,7 +61,7 @@ def range_report():
 # ---- Billing (owner) -------------------------------------------------------
 
 @bp.get("/billing")
-@owner_required
+@owner_or_ca  # read-only report: owner OR cafe_ca (Phase 4)
 def billing():
     """Collected orders grouped by day, with paid/unpaid totals.
     Optional ?date=YYYY-MM-DD restricts to a single day."""
@@ -65,13 +86,22 @@ def list_staff():
 @bp.post("/staff")
 @owner_required
 def create_staff():
-    """Owner adds a staff member directly (already approved)."""
+    """Owner adds a staff member directly (already approved).
+
+    Optional `role` in the body (default "staff") lets the owner create any
+    account type, including the read-only `cafe_ca` accounting login
+    (Phase 4). "owner" is never assignable here — ownership is seeded.
+    """
     data = request.get_json(silent=True) or {}
+    role = str(data.get("role") or "staff").strip().lower()
+    if role not in VALID_ROLES or role == "owner":
+        raise ApiError(
+            f"'role' must be one of: {', '.join(r for r in VALID_ROLES if r != 'owner')}")
     member = staff_repo.register(
         data.get("username", ""),
         data.get("password", ""),
         data.get("name", ""),
-        role="staff",
+        role=role,
         status="approved",
     )
     return jsonify(member), 201
@@ -154,7 +184,9 @@ def upload_image(item_id):
 
     file = request.files["file"]
     ext = (file.filename.rsplit(".", 1)[-1] if "." in file.filename else "jpg").lower()
-    key = f"menu/{item_id}-{uuid.uuid4().hex[:6]}.{ext}"
+    # Tenant-scoped S3 key: "<slug>/menu/<item>-<rand>.<ext>" so one bucket
+    # can hold every tenant's images without collisions.
+    key = f"{tenant_prefix()}menu/{item_id}-{uuid.uuid4().hex[:6]}.{ext}"
     s3().upload_fileobj(
         file, Config.IMAGES_BUCKET, key,
         ExtraArgs={"ContentType": file.mimetype or "image/jpeg"},
@@ -168,7 +200,19 @@ def upload_image(item_id):
 @bp.get("/inventory")
 @owner_required
 def list_inventory():
-    return jsonify(inventory_repo.list_all())
+    return jsonify(plain(inventory_repo.list_all()))
+
+
+@bp.get("/inventory/alerts")
+@owner_required
+def inventory_alerts():
+    """Low-stock alerts: items whose reorder_level is set (> 0) and whose
+    quantity has dropped to (or below) it, plus out-of-stock items.
+
+    Each entry: {id, item, qty, reorder_level, unit, out_of_stock}.
+    reorder_level = 0 disables alerts for that item (never returned).
+    """
+    return jsonify(inventory_repo.low_stock_alerts())
 
 
 @bp.get("/inventory/summary")
@@ -216,20 +260,23 @@ def delete_inventory_item(item_id):
 def profit_loss():
     """Profit/loss report using actual COGS from collected orders."""
     month_str = request.args.get("month")
+    target = None
     if month_str:
-        try:
-            target = datetime.strptime(month_str, "%Y-%m-%d")
-        except ValueError:
-            target = datetime.now(timezone.utc)
-    else:
+        for fmt in ("%Y-%m-%d", "%Y-%m"):
+            try:
+                target = datetime.strptime(month_str, fmt)
+                break
+            except ValueError:
+                continue
+    if target is None:
         target = datetime.now(timezone.utc)
 
     year, month = target.year, target.month
-    days_in_month = 30  # approximate
+    # Real calendar days (February has 28/29, March has 31, ...).
+    days_in_month = calendar.monthrange(year, month)[1]
 
-    # Sum sales revenue and COGS for the month
+    # Sum sales revenue for the month
     total_sales = 0
-    total_cogs = 0
     total_orders = 0
     for day in range(1, days_in_month + 1):
         try:
@@ -241,37 +288,49 @@ def profit_loss():
             continue
 
     # Sum COGS from collected orders
+    total_cogs = 0
     all_orders = orders_repo.list_orders(status="collected")
     for o in all_orders:
         created = o.get("created_at", "")
         if created.startswith(f"{year}-{month:02d}"):
             total_cogs += int(o.get("cogs", 0))
 
-    # Fallback: if no COGS tracked, use inventory value
+    # Fallback: when per-order COGS is missing, estimate with inventory value.
+    cogs_estimated = False
     if total_cogs == 0:
         inv_summary = inventory_repo.summary()
-        total_cogs = inv_summary.get("total_value", 0)
+        total_cogs = int(inv_summary.get("total_value", 0) or 0)
+        cogs_estimated = total_cogs > 0
+    cogs_source = ("none" if total_cogs == 0
+                   else "inventory_estimate" if cogs_estimated else "orders")
 
-    net_profit = total_sales - total_cogs
-    in_profit = net_profit >= 0 and total_cogs > 0
-    profit_margin = 0
-    if total_cogs > 0:
-        profit_margin = round((net_profit / total_cogs) * 100, 1)
+    revenue = total_sales
+    net_profit = revenue - total_cogs
+    in_profit = net_profit >= 0
+    # Profit margin = net / revenue (a percentage of sales).
+    profit_margin = round((net_profit / revenue) * 100, 1) if revenue else 0.0
+    # Markup on cost, exposed separately from the margin.
+    markup = round((net_profit / total_cogs) * 100, 1) if total_cogs > 0 else 0.0
 
     suggestion = None
     if not in_profit and total_cogs > 0:
         suggestion = (
-            f"Sales ({total_sales}) are below cost ({total_cogs}). "
+            f"Sales ({revenue}) are below cost ({total_cogs}). "
             f"Consider: (1) reduce slow-moving stock, (2) negotiate better supplier prices, "
             f"(3) increase prices on low-margin items."
         )
 
     return jsonify({
         "total_sales": total_sales,
+        "revenue": revenue,
         "total_cost": total_cogs,
+        "cogs_source": cogs_source,
+        "cogs_estimated": cogs_estimated,
         "net_profit": net_profit,
         "in_profit": in_profit,
         "profit_margin": profit_margin,
+        "markup": markup,
         "total_orders": total_orders,
+        "days_in_month": days_in_month,
         "suggestion": suggestion,
     })

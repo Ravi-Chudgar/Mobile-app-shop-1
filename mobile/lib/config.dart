@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart'
 /// - Android emulator reaches the host machine at 10.0.2.2
 /// - Everything else (web, iOS sim, desktop) uses localhost
 /// Override at build/run time with:
-///   --dart-define=API_BASE_URL=http://192.168.1.5:5000
+///   --dart-define=API_BASE_URL=http://192.168.1.5:9999
 ///
 /// Production (Cloudflare tunnel):
 ///   https://mobileapp.unonomercysound.online
@@ -18,7 +18,7 @@ class AppConfig {
     if (_override.isNotEmpty) return _override;
     // Android emulator maps the host loopback to 10.0.2.2.
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:5000';
+      return 'http://10.0.2.2:9999';
     }
     // Web, iOS, macOS, Windows, Linux — use production tunnel URL.
     return productionBaseUrl;
@@ -57,10 +57,10 @@ class AppConfig {
       String.fromEnvironment('GOOGLE_PAY_MERCHANT_ID', defaultValue: '');
   static const String googlePayGateway =
       String.fromEnvironment('GOOGLE_PAY_GATEWAY', defaultValue: 'example');
-  static const String googlePayGatewayMerchantId =
-      String.fromEnvironment('GOOGLE_PAY_GATEWAY_MERCHANT_ID',
-          defaultValue: 'exampleGatewayMerchant');
-  static const String googlePayMerchantName =
-      String.fromEnvironment('GOOGLE_PAY_MERCHANT_NAME',
-          defaultValue: 'Cafe POS');
+  static const String googlePayGatewayMerchantId = String.fromEnvironment(
+      'GOOGLE_PAY_GATEWAY_MERCHANT_ID',
+      defaultValue: 'exampleGatewayMerchant');
+  static const String googlePayMerchantName = String.fromEnvironment(
+      'GOOGLE_PAY_MERCHANT_NAME',
+      defaultValue: 'Cafe POS');
 }

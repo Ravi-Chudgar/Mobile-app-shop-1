@@ -1,4 +1,23 @@
-"""Authentication for owner + staff + kitchen: password hashing + JWT + role guards."""
+"""Authentication for owner + staff + kitchen + cafe_ca: password hashing +
+JWT + role guards.
+
+Roles (Phase 4):
+    owner    - full management
+    staff    - take/serve orders
+    kitchen  - order display
+    cafe_ca  - chartered accountant, READ-ONLY (accounting bridge).
+
+Multi-tenancy: `authenticate` scopes the login to one tenant's staff table
+and the issued JWT carries a `tenant` claim; `_guard` restores it onto
+`g.tenant` for the rest of the request (see app/tenancy.py).
+
+Guards match roles EXACTLY: a cafe_ca token is rejected by `owner_required`,
+`staff_required`, `kitchen_required` and `any_required` unless a route
+explicitly opts in with `cafe_ca_required` / `owner_ca_required`. On top of
+that, app/routes/ca_guard.py installs a global before-request hook that
+refuses every non-GET request made with a cafe_ca token, so the CA login can
+never perform a mutation even if a route forgot to check.
+"""
 import time
 from functools import wraps
 
@@ -7,7 +26,15 @@ from flask import request, jsonify, g
 from passlib.hash import pbkdf2_sha256
 
 from .config import Config
+from .tenancy import current_tenant, is_valid_slug, set_tenant, reset_tenant
 from .util import ApiError
+
+
+# Valid account roles. `cafe_ca` is the read-only chartered-accountant login
+# added in Phase 4 (accounting bridge).
+VALID_ROLES = ("owner", "staff", "kitchen", "cafe_ca")
+# Roles that must never perform a write (enforced globally by ca_guard.py).
+READ_ONLY_ROLES = ("cafe_ca",)
 
 
 def hash_password(password):
@@ -21,10 +48,13 @@ def verify_password(password, hashed):
         return False
 
 
-def issue_token(username, role):
+def issue_token(username, role, tenant=None):
+    """Sign a JWT. The `tenant` claim scopes every request made with it:
+    default = the current/default tenant (existing callers unchanged)."""
     payload = {
         "sub": username,
         "role": role,
+        "tenant": tenant or current_tenant(),
         "iat": int(time.time()),
         "exp": int(time.time()) + Config.JWT_TTL_HOURS * 3600,
     }
@@ -35,28 +65,50 @@ def decode_token(token):
     return jwt.decode(token, Config.JWT_SECRET, algorithms=["HS256"])
 
 
-def authenticate(username, password):
-    """Validate credentials. Returns {token, role, name, username}.
+def authenticate(username, password, tenant=None):
+    """Validate credentials against `tenant`'s staff table.
 
-    Raises ApiError(401) on bad credentials, ApiError(403) if a staff account
-    is still awaiting owner approval.
+    tenant=None -> Config.DEFAULT_TENANT (existing callers/tests unchanged).
+    The staff lookup, the last-login write and the issued token are all
+    scoped to that tenant, so an account that exists in one business can
+    never authenticate against another's.
+
+    Raises ApiError(400) for a malformed tenant code, ApiError(404) when the
+    tenant is not registered, ApiError(401) on bad credentials, ApiError(403)
+    if a staff account is still awaiting owner approval.
     """
     from .repositories import staff as staff_repo
+    from .repositories import tenants as tenants_repo
 
-    username = (username or "").strip().lower()
-    member = staff_repo.get(username)
-    if not member or not verify_password(password, member.get("password_hash", "")):
-        raise ApiError("Invalid username or password", 401)
-    if member.get("role") not in ("owner",) and member.get("status") != "approved":
-        raise ApiError("Your account is awaiting owner approval", 403)
+    slug = tenant or Config.DEFAULT_TENANT
+    slug = str(slug).strip()
+    if not is_valid_slug(slug):
+        raise ApiError("Invalid tenant code", 400)
+    # The default tenant is implicitly valid (env-driven); every other slug
+    # must exist in the registry before we go looking for accounts in it.
+    if slug != Config.DEFAULT_TENANT and not tenants_repo.get(slug):
+        raise ApiError("Unknown tenant", 404)
 
-    staff_repo.record_login(username)
-    return {
-        "token": issue_token(username, member["role"]),
-        "role": member["role"],
-        "name": member.get("name", username),
-        "username": username,
-    }
+    token_owner = set_tenant(slug)
+    try:
+        username = (username or "").strip().lower()
+        member = staff_repo.get(username)
+        if not member or not verify_password(password,
+                                              member.get("password_hash", "")):
+            raise ApiError("Invalid username or password", 401)
+        if member.get("role") not in ("owner",) and member.get("status") != "approved":
+            raise ApiError("Your account is awaiting owner approval", 403)
+
+        staff_repo.record_login(username)
+        return {
+            "token": issue_token(username, member["role"], tenant=slug),
+            "role": member["role"],
+            "name": member.get("name", username),
+            "username": username,
+            "tenant": slug,
+        }
+    finally:
+        reset_tenant(token_owner)
 
 
 def _claims_from_request():
@@ -81,6 +133,11 @@ def _guard(allowed_roles):
                 return jsonify({"error": e.message}), e.status
             if claims.get("role") not in allowed_roles:
                 return jsonify({"error": "Not permitted for your role"}), 403
+            # Bind the tenant BEFORE g.user so every repo call made by the
+            # handler (orders, sync, export, printing, loyalty, ...) reads
+            # the tables of the tenant named in the token. Tokens issued
+            # before multi-tenancy have no `tenant` claim -> default tenant.
+            g.tenant = claims.get("tenant") or Config.DEFAULT_TENANT
             g.user = claims
             return fn(*args, **kwargs)
 
@@ -90,7 +147,15 @@ def _guard(allowed_roles):
 
 
 # Owner-only (management). Staff-or-owner (day-to-day operations).
+# These keep EXACT role sets: a cafe_ca token is rejected by all of them
+# unless a route explicitly opts in below.
 owner_required = _guard({"owner"})
 staff_required = _guard({"owner", "staff"})
 kitchen_required = _guard({"owner", "kitchen"})
 any_required = _guard({"owner", "staff", "kitchen"})
+
+# Phase 4 — accounting bridge. Export/GST routes and the read-only report
+# routes the CA needs are guarded with owner_or_ca; cafe_ca_required is for
+# CA-only routes (none today, kept for symmetry).
+cafe_ca_required = _guard({"cafe_ca"})
+owner_or_ca = _guard({"owner", "cafe_ca"})

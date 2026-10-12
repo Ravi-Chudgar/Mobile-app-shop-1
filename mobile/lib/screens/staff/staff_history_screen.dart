@@ -36,9 +36,8 @@ class _StaffHistoryScreenState extends State<StaffHistoryScreen> {
     });
     final username = context.read<AuthState>().username;
     try {
-      final orders = await context
-          .read<ApiClient>()
-          .fetchOrders(takenBy: username);
+      final orders =
+          await context.read<ApiClient>().fetchOrders(takenBy: username);
       if (!mounted) return;
       setState(() {
         _orders = orders;
@@ -173,8 +172,7 @@ class _StaffHistoryScreenState extends State<StaffHistoryScreen> {
                                   Chip(
                                     label: Text(o.status,
                                         style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12)),
+                                            color: Colors.white, fontSize: 12)),
                                     backgroundColor: _statusColor(o.status),
                                     visualDensity: VisualDensity.compact,
                                   ),
@@ -198,12 +196,10 @@ class _StaffHistoryScreenState extends State<StaffHistoryScreen> {
                                   if (o.tableNumber != null) ...[
                                     const SizedBox(width: 12),
                                     Icon(Icons.table_restaurant_outlined,
-                                        size: 14,
-                                        color: Colors.grey.shade600),
+                                        size: 14, color: Colors.grey.shade600),
                                     const SizedBox(width: 4),
                                     Text('Table ${o.tableNumber}',
-                                        style:
-                                            const TextStyle(fontSize: 13)),
+                                        style: const TextStyle(fontSize: 13)),
                                   ],
                                 ],
                               ),
@@ -214,8 +210,9 @@ class _StaffHistoryScreenState extends State<StaffHistoryScreen> {
                                       size: 14, color: Colors.grey.shade600),
                                   const SizedBox(width: 4),
                                   Text(
-                                    _fmt.format(DateTime.tryParse(o.createdAt) ??
-                                        DateTime.now()),
+                                    _fmt.format(
+                                        DateTime.tryParse(o.createdAt) ??
+                                            DateTime.now()),
                                     style: const TextStyle(fontSize: 12),
                                   ),
                                   const Spacer(),
@@ -249,8 +246,7 @@ class _Stat extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon,
-            size: 20, color: Theme.of(context).colorScheme.primary),
+        Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
         const SizedBox(height: 4),
         Text(value,
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),

@@ -25,7 +25,7 @@ python scripts/bootstrap.py
 python scripts/seed.py       # prints the admin login (default owner / cafe123)
 
 # 3. run the API
-flask --app run run --debug  # http://localhost:5000
+flask --app run run --debug  # http://localhost:9999
 ```
 
 ## Run with Docker (whole stack)
@@ -36,7 +36,7 @@ seeds sample data on first boot:
 ```bash
 cp .env.example .env            # optional; defaults work without it
 docker compose up -d --build
-curl localhost:5000/health
+curl localhost:9999/health
 docker compose logs -f backend  # first boot prints the seed logins
 ```
 

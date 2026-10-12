@@ -65,7 +65,7 @@ Settings → Secrets and variables → Actions.
 | Secret | `BUILD_PROVISION_PROFILE_BASE64` | contents of `profile.b64` |
 | Secret | `TEAM_ID` | your Team ID |
 | Secret | `KEYCHAIN_PASSWORD` | any random string |
-| Variable | `API_BASE_URL` | `http://<your-kali-lan-ip>:5000` |
+| Variable | `API_BASE_URL` | `http://<your-kali-lan-ip>:9999` |
 
 Optional TestFlight upload — also create an API key first
 (App Store Connect → Users and Access → Integrations → **+**, role *App Manager*):

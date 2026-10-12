@@ -32,8 +32,7 @@ class CartLine {
   int get lineTotal => unitPrice * qty;
 
   /// A short human summary of the chosen options, e.g. "Large · Oat".
-  String get optionsSummary =>
-      selectedOptions.map((o) => o.label).join(' · ');
+  String get optionsSummary => selectedOptions.map((o) => o.label).join(' · ');
 
   Map<String, dynamic> toOrderItemJson() => {
         'item_id': item.id,

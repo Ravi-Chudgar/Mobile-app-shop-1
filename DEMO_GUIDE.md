@@ -37,7 +37,7 @@ flask --app app run --debug --host 0.0.0.0
 
 Expected output:
 ```
- * Running on http://127.0.0.1:5000
+ * Running on http://127.0.0.1:9999
  * Debug mode: on
 ```
 
@@ -274,11 +274,11 @@ During the demo, verify:
 
 **"Cannot reach the server" error?**
 - Ensure Flask is running: `python backend/scripts/bootstrap.py` must complete first
-- Check: `curl http://localhost:5000/health`
+- Check: `curl http://localhost:9999/health`
 
 **Orders not showing table number?**
 - Verify Flutter app is using the latest code
-- Check in browser DevTools: `curl http://localhost:5000/orders` should show `table_number` field
+- Check in browser DevTools: `curl http://localhost:9999/orders` should show `table_number` field
 
 **Table not getting occupied?**
 - Backend: Check `orders_repo.create()` calls `tables_repo.occupy()`

@@ -40,43 +40,43 @@ class _MenuPickerSheet extends StatelessWidget {
           color: Theme.of(context).scaffoldBackgroundColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
         ),
-      child: Column(
-        children: [
-          const SizedBox(height: 10),
-          Center(
-            child: Container(
-              width: 40,
-              height: 5,
-              decoration: BoxDecoration(
-                color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(3),
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            Center(
+              child: Container(
+                width: 40,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(3),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text('Add items',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w800)),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  tooltip: 'Close',
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('Add items',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800)),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const Expanded(child: _MenuPickerContents()),
-          const _CartFooter(),
-        ],
-      ),
+            const Expanded(child: _MenuPickerContents()),
+            const _CartFooter(),
+          ],
+        ),
       ),
     );
   }
@@ -170,8 +170,7 @@ class _MenuPickerContentsState extends State<_MenuPickerContents> {
                               .titleMedium
                               ?.copyWith(fontWeight: FontWeight.w700)),
                     ),
-                    for (final i
-                        in filtered.where((x) => x.category == cat))
+                    for (final i in filtered.where((x) => x.category == cat))
                       _ItemRow(
                         item: i,
                         onTap: () => setState(() => _selected = i),
@@ -286,8 +285,7 @@ class _ItemDetailPaneState extends State<_ItemDetailPane> {
             children: [
               MenuImage(url: item.imageUrl, height: 160),
               const SizedBox(height: 12),
-              Text(item.name,
-                  style: Theme.of(context).textTheme.titleLarge),
+              Text(item.name, style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 4),
               Text(formatMoney(item.basePrice),
                   style: Theme.of(context)
@@ -321,8 +319,7 @@ class _ItemDetailPaneState extends State<_ItemDetailPane> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
             child: FilledButton(
               onPressed: _valid ? _add : null,
-              child: Text(
-                  'Add to cart  •  ${formatMoney(_unitPrice * _qty)}'),
+              child: Text('Add to cart  •  ${formatMoney(_unitPrice * _qty)}'),
             ),
           ),
         ),
@@ -337,8 +334,7 @@ class _ItemDetailPaneState extends State<_ItemDetailPane> {
         const SizedBox(height: 18),
         Row(
           children: [
-            Text(g.group,
-                style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(g.group, style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(width: 8),
             Text(g.required ? 'Required' : 'Optional',
                 style: const TextStyle(fontSize: 12, color: Colors.grey)),
@@ -353,8 +349,8 @@ class _ItemDetailPaneState extends State<_ItemDetailPane> {
             contentPadding: EdgeInsets.zero,
             value: chosen,
             title: Text(c.label),
-            secondary: Text(
-                c.priceDelta == 0 ? '—' : '+${formatMoney(c.priceDelta)}'),
+            secondary:
+                Text(c.priceDelta == 0 ? '—' : '+${formatMoney(c.priceDelta)}'),
             onChanged: (_) => _toggle(g, c.label),
           );
         }),

@@ -17,7 +17,8 @@ class _FakeHttp extends http.BaseClient {
         '{"username":"sam","name":"Sam","role":"staff","status":"pending",'
         '"last_login":null}]';
     final res = http.StreamedResponse(
-      Stream.value(body.codeUnits), 200,
+      Stream.value(body.codeUnits),
+      200,
       headers: {'content-type': 'application/json'},
     );
     await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -40,7 +41,8 @@ Widget _host({ApiClient? api}) {
 }
 
 void main() {
-  testWidgets('StaffScreen renders pending + team with real theme', (tester) async {
+  testWidgets('StaffScreen renders pending + team with real theme',
+      (tester) async {
     await tester.pumpWidget(_host());
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();

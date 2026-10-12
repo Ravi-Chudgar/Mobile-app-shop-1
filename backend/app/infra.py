@@ -1,10 +1,18 @@
 """Idempotent creation of the Floci/AWS resources this backend needs, plus
-sample data. Imported by scripts/bootstrap.py and scripts/seed.py (and tests)."""
+sample data. Imported by scripts/bootstrap.py and scripts/seed.py (and tests).
+
+Multi-tenant: every helper takes an optional `slug` (None => default tenant,
+legacy behaviour). Non-default tenants get their own prefixed tables
+(``{slug}_orders`` ...); the tenant registry table and the images bucket are
+GLOBAL and created regardless of slug. `scripts/create_tenant.py` wires the
+three steps together: registry row -> ensure_infra(slug) -> seed_all(slug).
+"""
 import os
 import time
 
 from botocore.exceptions import ClientError
 
+from . import tenancy
 from .aws import dynamodb_client, dynamodb, s3
 from .config import Config
 from .repositories import menu as menu_repo
@@ -12,6 +20,7 @@ from .repositories import orders as orders_repo
 from .repositories import staff as staff_repo
 from .repositories import tables as tables_repo
 from .repositories import inventory as inventory_repo
+from .repositories import tenants as tenants_repo
 
 
 # --------------------------------------------------------------------------- #
@@ -32,23 +41,25 @@ def _wait_active(name):
     dynamodb_client().get_waiter("table_exists").wait(TableName=name)
 
 
-def ensure_menu_table():
-    if _table_exists(Config.MENU_TABLE):
+def ensure_menu_table(slug=None):
+    name = tenancy.tenant_table_name(Config.MENU_TABLE, slug)
+    if _table_exists(name):
         return
     dynamodb_client().create_table(
-        TableName=Config.MENU_TABLE,
+        TableName=name,
         BillingMode="PAY_PER_REQUEST",
         KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
     )
-    _wait_active(Config.MENU_TABLE)
+    _wait_active(name)
 
 
-def ensure_orders_table():
-    if _table_exists(Config.ORDERS_TABLE):
+def ensure_orders_table(slug=None):
+    name = tenancy.tenant_table_name(Config.ORDERS_TABLE, slug)
+    if _table_exists(name):
         return
     dynamodb_client().create_table(
-        TableName=Config.ORDERS_TABLE,
+        TableName=name,
         BillingMode="PAY_PER_REQUEST",
         KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
         AttributeDefinitions=[
@@ -63,43 +74,60 @@ def ensure_orders_table():
             }
         ],
     )
-    _wait_active(Config.ORDERS_TABLE)
+    _wait_active(name)
 
 
-def ensure_staff_table():
-    if _table_exists(Config.STAFF_TABLE):
+def ensure_staff_table(slug=None):
+    name = tenancy.tenant_table_name(Config.STAFF_TABLE, slug)
+    if _table_exists(name):
         return
     dynamodb_client().create_table(
-        TableName=Config.STAFF_TABLE,
+        TableName=name,
         BillingMode="PAY_PER_REQUEST",
         KeySchema=[{"AttributeName": "username", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "username", "AttributeType": "S"}],
     )
-    _wait_active(Config.STAFF_TABLE)
+    _wait_active(name)
 
 
-def ensure_tables_table():
-    if _table_exists(Config.TABLES_TABLE):
+def ensure_tables_table(slug=None):
+    name = tenancy.tenant_table_name(Config.TABLES_TABLE, slug)
+    if _table_exists(name):
         return
     dynamodb_client().create_table(
-        TableName=Config.TABLES_TABLE,
+        TableName=name,
         BillingMode="PAY_PER_REQUEST",
         KeySchema=[{"AttributeName": "number", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "number", "AttributeType": "S"}],
     )
-    _wait_active(Config.TABLES_TABLE)
+    _wait_active(name)
 
 
-def ensure_inventory_table():
-    if _table_exists(Config.INVENTORY_TABLE):
+def ensure_inventory_table(slug=None):
+    name = tenancy.tenant_table_name(Config.INVENTORY_TABLE, slug)
+    if _table_exists(name):
         return
     dynamodb_client().create_table(
-        TableName=Config.INVENTORY_TABLE,
+        TableName=name,
         BillingMode="PAY_PER_REQUEST",
         KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
     )
-    _wait_active(Config.INVENTORY_TABLE)
+    _wait_active(name)
+
+
+def ensure_tenants_table():
+    """GLOBAL tenant registry (`cafe_tenants`, PK slug) — never prefixed."""
+    name = Config.TENANTS_TABLE
+    if _table_exists(name):
+        return
+    dynamodb_client().create_table(
+        TableName=name,
+        BillingMode="PAY_PER_REQUEST",
+        KeySchema=[{"AttributeName": "slug", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "slug", "AttributeType": "S"}],
+    )
+    _wait_active(name)
 
 
 def ensure_bucket():
@@ -117,15 +145,45 @@ def ensure_bucket():
             )
 
 
-def ensure_infra():
-    ensure_menu_table()
-    ensure_orders_table()
-    ensure_staff_table()
-    ensure_tables_table()
-    ensure_inventory_table()
+def ensure_default_registry_entry():
+    """Register the DEFAULT tenant so /public/<default>/* and per-tenant
+    branding work out of the box. Seeded from the env cafe identity
+    (CAFE_NAME/ADDRESS/GSTIN/PHONE) and never overwritten afterwards — the
+    row is the operator's, not ours. Other tenants get their row from
+    scripts/create_tenant.py / tenants.create()."""
+    slug = Config.DEFAULT_TENANT
+    if not tenancy.is_valid_slug(slug) or tenants_repo.get(slug):
+        return
+    tenants_repo.create(
+        slug=slug,
+        display_name=Config.CAFE_NAME,
+        kind="cafe",
+        gstin=Config.CAFE_GSTIN,
+        address=Config.CAFE_ADDRESS,
+        phone=Config.CAFE_PHONE,
+    )
+
+
+def ensure_infra(slug=None):
+    """Idempotently create every resource `slug` needs.
+
+    slug=None => the default tenant (unchanged legacy behaviour: unprefixed
+    table names). The tenant registry table and the images bucket are
+    global and always created.
+    """
+    slug = slug or Config.DEFAULT_TENANT
+    ensure_tenants_table()
     ensure_bucket()
-    # Create the default set of tables on first boot.
-    tables_repo.ensure_default()
+    with tenancy.tenant_scope(slug):
+        if slug == Config.DEFAULT_TENANT:
+            ensure_default_registry_entry()
+        ensure_menu_table(slug)
+        ensure_orders_table(slug)
+        ensure_staff_table(slug)
+        ensure_tables_table(slug)
+        ensure_inventory_table(slug)
+        # Create the default set of tables on first boot (per tenant).
+        tables_repo.ensure_default()
 
 
 # --------------------------------------------------------------------------- #
@@ -178,9 +236,9 @@ def seed_menu():
         menu_repo.create(item)
 
 
-def seed_owner():
-    user = os.getenv("SEED_ADMIN_USER", "owner")
-    password = os.getenv("SEED_ADMIN_PASSWORD", "cafe123")
+def seed_owner(user=None, password=None):
+    user = user or os.getenv("SEED_ADMIN_USER", "owner")
+    password = password or os.getenv("SEED_ADMIN_PASSWORD", "cafe123")
     if not staff_repo.get(user):
         staff_repo.register(user, password, "Owner", role="owner",
                             status="approved")
@@ -224,6 +282,27 @@ def seed_inventory():
             inventory_repo.create(item)
 
 
+# Starter menu for a NEW tenant: an empty-ish 3-item template the owner can
+# edit or delete. Deliberately tiny — no demo orders, no demo staff.
+STARTER_MENU = [
+    {"id": "starter-tea", "name": "Tea", "category": "tea", "base_price": 150,
+     "description": "Freshly brewed, milky tea.", "options": []},
+    {"id": "starter-water", "name": "Bottled Water", "category": "cold_drinks",
+     "base_price": 200, "description": "Chilled 500 ml bottle.", "options": []},
+    {"id": "starter-snack", "name": "Snack Platter", "category": "food",
+     "base_price": 450, "description": "Assorted bites of the day.",
+     "options": []},
+]
+
+
+def seed_starter_menu():
+    created = []
+    for item in STARTER_MENU:
+        if not menu_repo.get_raw(item["id"]):
+            created.append(menu_repo.create(dict(item)))
+    return created
+
+
 def seed_orders():
     """A few of today's orders so the sales dashboard isn't empty."""
     samples = [
@@ -247,15 +326,47 @@ def seed_orders():
     return created
 
 
-def seed_all():
-    seed_menu()
-    seed_inventory()
-    user, password = seed_owner()
-    staff = seed_staff()
-    orders = seed_orders()
-    return {
-        "owner_user": user,
-        "owner_password": password,
-        "staff": staff,
-        "orders": len(orders),
-    }
+def seed_all(slug=None, owner_user=None, owner_password=None):
+    """Seed data for `slug` (None => default tenant).
+
+    Default tenant: the full legacy demo (menu, inventory, owner, demo
+    staff, collected sample orders) — unchanged from before multi-tenancy.
+
+    Any other tenant: a clean starter only — its 5 tables, DEFAULT_TABLE_COUNT
+    tables, one owner account (owner_user/owner_password, defaulting to the
+    SEED_ADMIN_* env) and the 3-item template menu. No demo staff, no demo
+    orders.
+
+    Returns a dict with at least {tenant, owner_user, owner_password}.
+    """
+    slug = slug or Config.DEFAULT_TENANT
+    with tenancy.tenant_scope(slug):
+        if slug == Config.DEFAULT_TENANT:
+            seed_menu()
+            seed_inventory()
+            user, password = seed_owner(owner_user, owner_password)
+            staff = seed_staff()
+            orders = seed_orders()
+            return {
+                "tenant": slug,
+                "owner_user": user,
+                "owner_password": password,
+                "staff": staff,
+                "orders": len(orders),
+            }
+
+        # New tenant: make sure its tables exist even if ensure_infra(slug)
+        # was never called (idempotent), then give it a clean starter set.
+        ensure_infra(slug)
+        tables_repo.ensure_default()
+        user, password = seed_owner(owner_user, owner_password)
+        items = seed_starter_menu()
+        return {
+            "tenant": slug,
+            "owner_user": user,
+            "owner_password": password,
+            "staff": [],
+            "orders": 0,
+            "menu_items": len(items),
+            "tables": Config.DEFAULT_TABLE_COUNT,
+        }

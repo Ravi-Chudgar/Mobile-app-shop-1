@@ -10,6 +10,12 @@ class MenuItem {
   final bool available;
   final List<OptionGroup> options;
 
+  /// GST percent (0/5/12/18). Menu prices are tax-inclusive.
+  final int gstRate;
+
+  /// HSN/SAC code printed on bills (restaurant service default: 9963).
+  final String hsnCode;
+
   const MenuItem({
     required this.id,
     required this.name,
@@ -19,6 +25,8 @@ class MenuItem {
     required this.imageUrl,
     required this.available,
     required this.options,
+    this.gstRate = 5,
+    this.hsnCode = '9963',
   });
 
   factory MenuItem.fromJson(Map<String, dynamic> json) => MenuItem(
@@ -32,5 +40,7 @@ class MenuItem {
         options: ((json['options'] ?? []) as List)
             .map((o) => OptionGroup.fromJson(o as Map<String, dynamic>))
             .toList(),
+        gstRate: (json['gst_rate'] ?? 5) as int,
+        hsnCode: (json['hsn_code'] ?? '9963') as String,
       );
 }
