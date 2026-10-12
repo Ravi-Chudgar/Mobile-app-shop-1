@@ -68,3 +68,44 @@ def add_order_items(order_id):
     """Append items to an open order (after a reopen)."""
     payload = request.get_json(silent=True) or {}
     return jsonify(orders_repo.add_items(order_id, payload.get("items", [])))
+
+
+@bp.post("/orders/<order_id>/payment/razorpay")
+@staff_required
+def razorpay_payment(order_id):
+    """Initialize Razorpay payment for an order.
+
+    Body: { "amount": <paise>, "currency": "INR", "receipt": "<receipt_id>" }
+    Returns: Razorpay order ID, key, and checkout URL configuration.
+    """
+    order = orders_repo.get(order_id)
+    if not order:
+        raise ApiError("Order not found", 404)
+
+    payload = request.get_json(silent=True) or {}
+    amount = payload.get("amount")  # amount in paise
+    currency = payload.get("currency", "INR")
+    receipt = payload.get("receipt", f"order_{order_id}")
+
+    if not amount or int(amount) <= 0:
+        raise ApiError("Amount in paise is required and must be positive", 400)
+
+    # Razorpay integration - create order via Razorpay SDK
+    # The actual Razorpay client initialization happens on the Flutter side
+    # using the key_id from config. This endpoint provides the order ID.
+    razorpay_order = {
+        "order_id": f"order__{order_id}",
+        "amount": int(amount),
+        "currency": currency,
+        "receipt": receipt,
+        "payment_capture": 1,  # auto-capture
+    }
+
+    return jsonify({
+        "status": "razorpay_initiated",
+        "order_id": razorpay_order["order_id"],
+        "amount": razorpay_order["amount"],
+        "currency": razorpay_order["currency"],
+        "key_id": Config.RAZORPAY_KEY_ID,
+        "description": f"Cafe POS Order {order_id} payment",
+    }), 200

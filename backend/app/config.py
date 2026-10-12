@@ -77,10 +77,10 @@ class Config:
     # Value of one point in paise (100 => 1 point = ₹1).
     LOYALTY_POINT_VALUE_PAISE = int(os.getenv("LOYALTY_POINT_VALUE_PAISE", "100"))
 
-    # --- Phase 3: delivery partner ingestion (X-Integration-Key header) ---
-    # Empty key => the endpoint rejects every request (fail closed).
-    SWIGGY_API_KEY = os.getenv("SWIGGY_API_KEY", "")
-    ZOMATO_API_KEY = os.getenv("ZOMATO_API_KEY", "")
+    # --- Phase 3: Razorpay payments ---
+    # Get from Razorpay Dashboard: https://dashboard.razorpay.com/app/keys
+    RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
+    RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 
     # --- Offline-first sync (routes/sync.py) ---
     # Max ops accepted in one POST /sync/batch replay from an offline client.

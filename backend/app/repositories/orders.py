@@ -30,7 +30,7 @@ FREEING_STATUSES = ("collected", "cancelled")
 # Payment methods accepted on a split/multi payment payload.
 # "loyalty" is the points-redemption row injected at collect time (Phase 3);
 # it is only ever valid together with a `redeem_points` on the payload.
-PAYMENT_METHODS = ("cash", "upi", "card", "gpay", "credit", "other", "loyalty")
+PAYMENT_METHODS = ("cash", "upi", "card", "gpay", "credit", "other", "loyalty", "razorpay")
 
 
 

@@ -192,6 +192,9 @@ class ApiClient {
     bool paid = false,
     String? paymentMethod,
     String? paymentToken,
+    String? razorpayOrderId,
+    String? razorpayPaymentId,
+    String? razorpaySignature,
     List<Map<String, dynamic>>? payments,
     int? redeemPoints,
   }) async {
@@ -200,11 +203,29 @@ class ApiClient {
       if (paid) 'paid': true,
       if (paymentMethod != null) 'payment_method': paymentMethod,
       if (paymentToken != null) 'payment_token': paymentToken,
+      if (razorpayOrderId != null) 'razorpay_order_id': razorpayOrderId,
+      if (razorpayPaymentId != null) 'razorpay_payment_id': razorpayPaymentId,
+      if (razorpaySignature != null) 'razorpay_signature': razorpaySignature,
       if (payments != null && payments.isNotEmpty) 'payments': payments,
       if (redeemPoints != null && redeemPoints > 0)
         'redeem_points': redeemPoints,
     }) as Map<String, dynamic>;
     return CafeOrder.fromJson(data);
+  }
+
+  /// Initialize a Razorpay payment for an order.
+  /// Body: {"amount": <paise>, "currency": "INR", "receipt": "<optional>"}
+  Future<Map<String, dynamic>> initRazorpayPayment({
+    required int amount,  // amount in paise
+    String currency = "INR",
+    String? receipt,
+  }) async {
+    final resp = await _send('POST', '/orders/payment/razorpay', {
+      'amount': amount,
+      'currency': currency,
+      if (receipt != null) 'receipt': receipt,
+    }) as Map<String, dynamic>;
+    return resp;
   }
 
   Future<CafeOrder> reopenOrder(String id) async {
