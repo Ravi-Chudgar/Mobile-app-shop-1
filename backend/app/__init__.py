@@ -15,17 +15,28 @@ load_dotenv()  # load backend/.env if present
 # tokens, not cookies). Set CORS_ORIGINS to a comma-separated list in prod.
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 
-# Redis cache initialization — optional; no-code failure if Redis is unavailable.
+# Rate limiter — limits API calls per IP to prevent abuse.
+# Uses Redis if available, otherwise falls back to in-memory storage.
 try:
-    from .cache import get_redis as _init_redis  # type: ignore
-    _redis = _init_redis()
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+    _limiter = Limiter(
+        key_func=get_remote_address,
+        default_limits=["200 per day", "50 per hour"],
+        storage_uri="redis://redis:6379/1" if CACHE_AVAILABLE else "memory://",
+    )
     CACHE_AVAILABLE = True
 except Exception:  # pragma: no cover
+    _limiter = None
     CACHE_AVAILABLE = False
 
 
 def create_app():
     app = Flask(__name__)
+
+    # Initialize rate limiter
+    if _limiter is not None:
+        _limiter.init_app(app)
 
     # Auto-register every blueprint in app/routes/*: each module exposes a
     # module-level `bp`. Adding a new route file needs no edit here, which

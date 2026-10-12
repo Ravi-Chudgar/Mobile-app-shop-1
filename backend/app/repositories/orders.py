@@ -77,6 +77,32 @@ def normalize_payments(payments, due):
 
 
 def create(payload, taken_by=None, occupy_table=True, client_op_id=None):
+    """Create an order with input validation."""
+    # Validate payload structure
+    if not payload or not isinstance(payload, dict):
+        raise ApiError("Invalid order payload", 400)
+    
+    items = payload.get("items", [])
+    if not items or not isinstance(items, list):
+        raise ApiError("Order must contain at least one item", 400)
+    
+    # Validate table number if provided
+    table_number = payload.get("table_number")
+    if table_number is not None and not isinstance(table_number, str):
+        raise ApiError("Table number must be a string", 400)
+    
+    # Validate source
+    valid_sources = ("counter", "qr", "swiggy", "zomato")
+    source = payload.get("source", "counter")
+    if source not in valid_sources:
+        raise ApiError(f"Invalid source. Must be one of: {', '.join(valid_sources)}", 400)
+    
+    # Validate payment method
+    valid_payment_methods = ("cash", "upi", "card", "gpay", "credit", "other", "loyalty")
+    payment_method = payload.get("payment_method", "cash")
+    if payment_method not in valid_payment_methods:
+        raise ApiError(f"Invalid payment method. Must be one of: {', '.join(valid_payment_methods)}", 400)
+    
     lines, total = price_order(payload.get("items", []), menu_repo.get_raw)
     sub_total, tax_total = order_tax_totals(lines)
 
