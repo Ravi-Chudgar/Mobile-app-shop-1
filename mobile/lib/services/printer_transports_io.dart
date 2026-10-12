@@ -18,22 +18,30 @@ import 'printer_models.dart';
 
 export 'printer_models.dart';
 
-/// The `print_bluetooth_thermal` plugin does not request Android 12+ runtime
-/// permissions itself and its method calls never complete when
-/// [android.permission.BLUETOOTH_CONNECT] is missing, so guard every Bluetooth
-/// call with an explicit check using `permission_handler`.
+/// Check and request Bluetooth permissions for the current platform.
 ///
-/// This function checks and requests all required Bluetooth and location
-/// permissions. Returns normally if all permissions are granted, or throws
-/// a [PrinterException] if the user denies the permissions.
+/// This function requests the necessary Bluetooth permissions depending on the
+/// platform:
+///
+/// - **Android 12+ (API 31)** : Requests `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`,
+///   and `Location` permissions. All three must be granted for Bluetooth scanning
+///   and connections to work.
+/// - **iOS 13+** : Checks the current Bluetooth permission status. The first time
+///   the app uses Bluetooth, iOS shows a system permission dialog whose message
+///   is defined by `NSBluetoothUsageDescription` in Info.plist (already configured).
+///   If the user has previously denied, the setting can be changed in:
+///   `Settings → Privacy → Bluetooth`.
+///
+/// Throws a [PrinterException] with a platform-appropriate message if the
+/// required permissions are not granted after requesting them.
 Future<void> _ensureBluetoothPermission() async {
-  // Check and request BLUETOOTH_SCAN permission (Android 12+ / API 31)
+  // Request BLUETOOTH_SCAN permission (Android 12+ / API 31)
   var bluetoothScanStatus = await Permission.bluetoothScan.status;
   if (!bluetoothScanStatus.isGranted) {
     bluetoothScanStatus = await Permission.bluetoothScan.request();
   }
 
-  // Check and request BLUETOOTH_CONNECT permission (Android 12+ / API 31)
+  // Request BLUETOOTH_CONNECT permission (Android 12+ / API 31)
   var bluetoothConnectStatus = await Permission.bluetoothConnect.status;
   if (!bluetoothConnectStatus.isGranted) {
     bluetoothConnectStatus = await Permission.bluetoothConnect.request();
@@ -45,7 +53,7 @@ Future<void> _ensureBluetoothPermission() async {
     locationStatus = await Permission.location.request();
   }
 
-  // Also check coarse location
+  // Also check coarse location on Android
   var locationCoarseStatus = await Permission.locationAlways.status;
   if (!locationCoarseStatus.isGranted) {
     locationCoarseStatus = await Permission.locationAlways.request();
@@ -57,12 +65,13 @@ Future<void> _ensureBluetoothPermission() async {
       locationStatus.isGranted) {
     // All permissions granted - proceed with Bluetooth operations
     return;
-  } else {
-    // Permission denied - throw a clear exception for the UI
-    throw PrinterException(
-        'Bluetooth permission not granted — allow "Nearby devices" and '
-        '"Location" permissions for this app in Android Settings, then try again.');
   }
+
+  // If location is not granted, the user probably denied the permission prompt.
+  // Provide a clear, platform-appropriate message.
+  throw PrinterException(
+      'Bluetooth permission not granted — allow "Nearby devices" and '
+      '"Location" permissions for this app in your device Settings, then try again.');
 }
 
 /// List previously paired Bluetooth thermal printers.
