@@ -35,13 +35,22 @@ export 'printer_models.dart';
 /// Throws a [PrinterException] with a platform-appropriate message if the
 /// required permissions are not granted after requesting them.
 Future<void> _ensureBluetoothPermission() async {
-  // Request BLUETOOTH_SCAN permission (Android 12+ / API 31)
+  // ---- iOS: Permission.bluetooth triggers the NSBluetoothUsageDescription
+  // dialog. On Android this maps to BLUETOOTH_CONNECT (API 31+) and is a
+  // no-op on older Android versions. Request it FIRST so the iOS dialog
+  // appears before the Location dialog.
+  var bluetoothStatus = await Permission.bluetooth.status;
+  if (!bluetoothStatus.isGranted) {
+    bluetoothStatus = await Permission.bluetooth.request();
+  }
+
+  // ---- Android 12+ (API 31): also request BLUETOOTH_SCAN permission
   var bluetoothScanStatus = await Permission.bluetoothScan.status;
   if (!bluetoothScanStatus.isGranted) {
     bluetoothScanStatus = await Permission.bluetoothScan.request();
   }
 
-  // Request BLUETOOTH_CONNECT permission (Android 12+ / API 31)
+  // ---- Android 12+ (API 31): also request BLUETOOTH_CONNECT permission
   var bluetoothConnectStatus = await Permission.bluetoothConnect.status;
   if (!bluetoothConnectStatus.isGranted) {
     bluetoothConnectStatus = await Permission.bluetoothConnect.request();
@@ -59,16 +68,18 @@ Future<void> _ensureBluetoothPermission() async {
     locationCoarseStatus = await Permission.locationAlways.request();
   }
 
-  // Verify all required permissions are granted
-  if (bluetoothScanStatus.isGranted &&
+  // ---- Verify all required permissions are granted ----
+  // On iOS: only bluetooth + location matter (androidScan/Connect are no-ops)
+  // On Android: all four matter
+  if (bluetoothStatus.isGranted &&
+      bluetoothScanStatus.isGranted &&
       bluetoothConnectStatus.isGranted &&
       locationStatus.isGranted) {
     // All permissions granted - proceed with Bluetooth operations
     return;
   }
 
-  // If location is not granted, the user probably denied the permission prompt.
-  // Provide a clear, platform-appropriate message.
+  // Permission denied - provide a clear, platform-appropriate message
   throw PrinterException(
       'Bluetooth permission not granted — allow "Nearby devices" and '
       '"Location" permissions for this app in your device Settings, then try again.');
