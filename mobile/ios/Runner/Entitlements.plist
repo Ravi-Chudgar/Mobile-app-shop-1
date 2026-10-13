@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="1.0"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.developer.bluetooth-central</key>
+    <true/>
+    <key>com.apple.developer.bluetooth-peripheral</key>
+    <true/>
+    <key>com.apple.developer.networking.requires-external-connectivity</key>
+    <false/>
+</dict>
+</plist>
+echo "Entitlements file created"

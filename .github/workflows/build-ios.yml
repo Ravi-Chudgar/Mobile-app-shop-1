@@ -2,6 +2,12 @@ name: Build iOS IPA
 
 on:
   workflow_dispatch:
+    # Input to control TestFlight upload
+    inputs:
+      upload-to-testflight:
+        description: 'Upload IPA to TestFlight after build?'
+        required: false
+        default: 'false'
 
 jobs:
   build:
@@ -71,7 +77,7 @@ jobs:
           </plist>
           EOF
 
-      - name: Build IPA
+      - name: Build Clean IPA
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL }}
           DEVELOPMENT_TEAM: ${{ secrets.TEAM_ID }}
@@ -80,13 +86,15 @@ jobs:
             echo "::error::Repository variable API_BASE_URL is not set (Settings → Secrets and variables → Actions → Variables). Example: http://192.168.1.50:9999"
             exit 1
           fi
+          # Clean build ensures fresh Info.plist permissions are included
+          flutter clean
           flutter build ipa --release \
             --build-number="${{ github.run_number }}" \
             --export-options-plist="$RUNNER_TEMP/ExportOptions.plist" \
             --dart-define=API_BASE_URL="$API_BASE_URL"
 
-      - name: Upload to TestFlight
-        if: ${{ vars.UPLOAD_TO_TESTFLIGHT == 'true' }}
+      - name: Upload to TestFlight (Optional)
+        if: ${{ inputs.upload-to-testflight == 'true' }}
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -102,3 +110,28 @@ jobs:
         with:
           name: cafe-ios-ipa
           path: mobile/build/ios/ipa/*.ipa
+
+# Usage notes:
+# ---------------------------------------------------------
+# After this workflow runs and downloads the IPA:
+#
+# 1. UNINSTALL the old app from your iPhone first:
+#    Settings → General → iPhone Storage → Cafe App → Delete App
+#
+# 2. Install the new IPA:
+#    - Via Xcode: Open organizer → Devices → [your iPhone] → Install
+#    - OR via AltStore/Sideloadly: Drag the downloaded IPA
+#
+# 3. iOS will show permission dialog on first launch:
+#    - "This app needs Bluetooth permissions to scan for printers"
+#    - "This app needs location permissions to scan for Bluetooth devices"
+#
+# 4. Tap "Allow" / "While Using" to grant permissions
+#
+# 4. Test the Bluetooth scanner in Printer Settings
+#
+# ---------------------------------------------------------
+# To use TestFlight upload:
+# - Go to Actions tab → Run workflow → Check "Upload to TestFlight"
+# - Or set env var: UPLOAD_TO_TESTFLIGHT=true
+# - Install from TestFlight app (always fresh install = permissions show)
