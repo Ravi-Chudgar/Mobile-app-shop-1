@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../services/api_client.dart';
 import '../../state/auth_state.dart';
 import '../../widgets/shell_app_bar.dart';
 import '../../widgets/ui_kit.dart';
@@ -10,6 +11,7 @@ import '../staff/ask_screen.dart';
 import '../admin/menu_editor_screen.dart';
 import '../admin/orders_queue_screen.dart';
 import 'billing_screen.dart';
+import 'cafe_profile_screen.dart';
 import 'exports_screen.dart';
 import 'printer_settings_screen.dart';
 import 'reports_screen.dart';
@@ -29,6 +31,39 @@ class OwnerShell extends StatefulWidget {
 
 class _OwnerShellState extends State<OwnerShell> {
   int _index = 0;
+
+  // Show the first-time setup wizard at most once per app session, and only
+  // when the cafe has no business details yet (no GST/PAN/licence/owner set).
+  static bool _setupPrompted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptSetup());
+  }
+
+  Future<void> _maybePromptSetup() async {
+    if (_setupPrompted || !mounted) return;
+    _setupPrompted = true;
+    try {
+      final api = context.read<ApiClient>();
+      final p = await api.getCafeProfile();
+      final unconfigured =
+          '${p['gstin'] ?? ''}'.isEmpty &&
+          '${p['pan'] ?? ''}'.isEmpty &&
+          '${p['shop_license'] ?? ''}'.isEmpty &&
+          '${p['owner_name'] ?? ''}'.isEmpty;
+      if (!unconfigured || !mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => const CafeSetupWizard(),
+        ),
+      );
+    } catch (_) {
+      // Offline or unknown — never block the owner on setup.
+    }
+  }
 
   static const _titles = [
     'Dashboard',
@@ -185,6 +220,20 @@ class _OwnerShellState extends State<OwnerShell> {
                         context,
                         MaterialPageRoute(
                             builder: (_) => const MenuEditorScreen()),
+                      );
+                    },
+                  ),
+                  _MoreTile(
+                    icon: Icons.storefront_outlined,
+                    selectedIcon: Icons.storefront,
+                    title: 'Cafe Profile',
+                    subtitle: 'Name, GST, PAN & licence on bills',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const CafeProfileScreen()),
                       );
                     },
                   ),

@@ -21,7 +21,8 @@ from ..repositories import orders as orders_repo
 from ..repositories import reports as reports_repo
 from ..repositories import staff as staff_repo
 from ..repositories import inventory as inventory_repo
-from ..tenancy import tenant_prefix
+from ..repositories import tenants as tenants_repo
+from ..tenancy import tenant_prefix, current_tenant
 from ..util import ApiError, plain
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -334,3 +335,32 @@ def profit_loss():
         "days_in_month": days_in_month,
         "suggestion": suggestion,
     })
+
+
+# --- Cafe profile (business identity printed on bills) ----------------------
+# The owner sets these once from the Cafe Profile screen; they show up on the
+# thermal receipt (GST / PAN / shop licence / owner name). `bill_footer` is the
+# free-text line printed just above "Thank you".
+
+_PROFILE_FIELDS = ("display_name", "gstin", "address", "phone",
+                   "bill_footer", "owner_name", "pan", "shop_license")
+
+
+@bp.get("/cafe/profile")
+@owner_required
+def get_cafe_profile():
+    """Current tenant's editable business identity (empty strings when unset)."""
+    entry = tenants_repo.get(current_tenant()) or {}
+    return jsonify({f: entry.get(f, "") or "" for f in _PROFILE_FIELDS})
+
+
+@bp.put("/cafe/profile")
+@owner_required
+def update_cafe_profile():
+    """Partially update the cafe profile. Only whitelisted fields are stored."""
+    data = request.get_json(silent=True) or {}
+    fields = {k: data[k] for k in _PROFILE_FIELDS if k in data}
+    if not fields:
+        raise ApiError("No editable fields supplied")
+    updated = tenants_repo.update(current_tenant(), **fields)
+    return jsonify({f: updated.get(f, "") or "" for f in _PROFILE_FIELDS})

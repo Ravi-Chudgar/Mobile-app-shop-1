@@ -335,6 +335,20 @@ class ApiClient {
     return MenuItem.fromJson(data);
   }
 
+  /// Owner's business identity printed on bills (name, GST, PAN, licence…).
+  Future<Map<String, dynamic>> getCafeProfile() async {
+    final data = await _get('/admin/cafe/profile') as Map<String, dynamic>;
+    return data;
+  }
+
+  /// Partially update the cafe profile. Returns the saved profile.
+  Future<Map<String, dynamic>> updateCafeProfile(
+      Map<String, dynamic> payload) async {
+    final data =
+        await _send('PUT', '/admin/cafe/profile', payload) as Map<String, dynamic>;
+    return data;
+  }
+
   Future<void> deleteMenuItem(String id) async {
     await _send('DELETE', '/admin/menu/$id', null);
   }

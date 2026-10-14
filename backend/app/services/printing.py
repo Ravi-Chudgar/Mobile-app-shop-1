@@ -109,6 +109,9 @@ def cafe_info(overrides=None):
         "gstin": entry.get("gstin") or Config.CAFE_GSTIN,
         "phone": entry.get("phone") or Config.CAFE_PHONE,
         "bill_footer": entry.get("bill_footer") or "",
+        "owner_name": entry.get("owner_name") or Config.CAFE_OWNER_NAME,
+        "pan": entry.get("pan") or Config.CAFE_PAN,
+        "shop_license": entry.get("shop_license") or Config.CAFE_SHOP_LICENSE,
     }
     if overrides:
         info.update({k: v for k, v in overrides.items() if v})
@@ -167,12 +170,20 @@ def build_receipt(order, cafe=None, payments=None):
     out = [INIT, ALIGN_CENTER, DOUBLE_WH, BOLD_ON]
     out.append(_safe(cafe.get("name") or "Cafe").encode("ascii") + b"\n")
     out += [NORMAL, BOLD_OFF]
+    if cafe.get("owner_name"):
+        out.append(_safe(f"Prop: {cafe['owner_name']}").encode("ascii") + b"\n")
     for key in ("address", "phone"):
         if cafe.get(key):
             for l in _wrap(cafe[key]):
                 out.append(_safe(l).encode("ascii") + b"\n")
+    # Business identity — GST, PAN and shop licence, each only when set.
     if cafe.get("gstin"):
         out.append(f"GSTIN: {cafe['gstin']}".encode("ascii") + b"\n")
+    if cafe.get("pan"):
+        out.append(f"PAN: {cafe['pan']}".encode("ascii") + b"\n")
+    if cafe.get("shop_license"):
+        for l in _wrap(f"Licence: {cafe['shop_license']}"):
+            out.append(_safe(l).encode("ascii") + b"\n")
     out += [ALIGN_LEFT, b"-" * COLS + b"\n"]
 
     out.append(_pad_line("Order", str(order.get("id", ""))).encode("ascii") + b"\n")

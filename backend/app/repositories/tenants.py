@@ -4,7 +4,7 @@ One row per tenant holding its identity + config:
 
     slug, display_name, kind ("cafe" | "hostel" | ...), gstin, address,
     phone, bill_footer, qr_base_url, kitchen_printer_host, auto_print_kot
-    (bool), created_at
+    (bool), owner_name, pan, shop_license, created_at
 
 The row is the source of truth for branding (printing.cafe_info), for
 GET /public/<slug>/config and for the QR / kitchen-printer overrides. The
@@ -29,7 +29,7 @@ def _now():
 
 def create(slug, display_name, kind="cafe", gstin="", address="", phone="",
            bill_footer="", qr_base_url="", kitchen_printer_host="",
-           auto_print_kot=False):
+           auto_print_kot=False, owner_name="", pan="", shop_license=""):
     """Register a new tenant (validates the slug, refuses duplicates).
 
     Raises ApiError(400) for a bad slug/name, ApiError(409) when the slug is
@@ -55,10 +55,44 @@ def create(slug, display_name, kind="cafe", gstin="", address="", phone="",
         "qr_base_url": str(qr_base_url or "").strip(),
         "kitchen_printer_host": str(kitchen_printer_host or "").strip(),
         "auto_print_kot": bool(auto_print_kot),
+        "owner_name": str(owner_name or "").strip(),
+        "pan": str(pan or "").strip(),
+        "shop_license": str(shop_license or "").strip(),
         "created_at": _now(),
     }
     aws.tenants_table().put_item(Item=item)
     return plain(item)
+
+
+# Registry fields an owner may edit from the Cafe Profile screen. `display_name`
+# is included so the cafe's printed name is settable; slug/kind/created_at are
+# intentionally excluded (immutable identity).
+_EDITABLE = (
+    "display_name", "gstin", "address", "phone", "bill_footer",
+    "owner_name", "pan", "shop_license",
+)
+
+
+def update(slug, **fields):
+    """Update the editable registry fields for `slug` (partial update).
+
+    Creates a minimal row first if none exists yet (a tenant provisioned before
+    the registry table existed). Returns the merged row. Raises ApiError(400)
+    when an unknown field is passed.
+    """
+    unknown = set(fields) - set(_EDITABLE)
+    if unknown:
+        raise ApiError(f"Unknown field(s): {', '.join(sorted(unknown))}")
+    current = get(slug) or {
+        "slug": str(slug), "kind": "cafe", "created_at": _now(),
+    }
+    for key in _EDITABLE:
+        if key in fields:
+            # bill_footer and text fields are plain strings; auto_print_kot is
+            # not editable here. Store trimmed strings.
+            current[key] = str(fields[key] or "").strip()
+    aws.tenants_table().put_item(Item=current)
+    return plain(current)
 
 
 def get(slug):
@@ -98,4 +132,4 @@ def config_for(slug):
 
 
 # Re-exported so callers only import the repository for slug rules too.
-__all__ = ["create", "get", "list_all", "config_for", "is_valid_slug"]
+__all__ = ["create", "update", "get", "list_all", "config_for", "is_valid_slug"]

@@ -55,6 +55,11 @@ class Config:
         "CAFE_ADDRESS", "12 MG Road, Ahmedabad, Gujarat 380001")
     CAFE_GSTIN = os.getenv("CAFE_GSTIN", "24ABCDE1234F1Z5")
     CAFE_PHONE = os.getenv("CAFE_PHONE", "+91 98765 43210")
+    # Business identity printed on bills (set per-tenant from the Cafe
+    # Profile screen; these env values are only the fallback).
+    CAFE_OWNER_NAME = os.getenv("CAFE_OWNER_NAME", "")
+    CAFE_PAN = os.getenv("CAFE_PAN", "")
+    CAFE_SHOP_LICENSE = os.getenv("CAFE_SHOP_LICENSE", "")
 
     # --- Thermal (ESC/POS) printer ---
     # Empty host => dry-run mode: receipts are built but nothing is sent.
