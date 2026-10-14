@@ -560,8 +560,11 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
           ] else if (!_netScanning) ...[
             const SizedBox(height: 8),
             Text(
-              'Tap Search to find printers on this Wi-Fi network. '
-              'On iPhone, allow Local Network access when asked.',
+              'Tap Search to find printers on this Wi-Fi network.\n'
+              'Printer broadcasts its own Wi-Fi? Join the printer\'s network '
+              'in Settings → Wi-Fi first, then tap Search.\n'
+              'On iPhone, allow Local Network access when asked — if the '
+              'list stays empty, tap Search once more after allowing.',
               style: Theme.of(context)
                   .textTheme
                   .bodySmall

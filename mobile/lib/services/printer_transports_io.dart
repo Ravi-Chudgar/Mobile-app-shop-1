@@ -217,11 +217,15 @@ Future<void> sendBluetooth(String address, Uint8List bytes) async {
 /// that accepts the connection on a print port is reported as a candidate
 /// printer.
 ///
-/// On iOS the first sweep triggers the system **Local Network** permission
-/// prompt (`NSLocalNetworkUsageDescription` is in Info.plist). While the
-/// prompt is open — or if access was denied — the probes time out and an
-/// empty list comes back; re-running after allowing access finds the
-/// printers.
+/// On iOS this first forces the system **Local Network** permission prompt
+/// with a UDP broadcast (a bare TCP sweep does not reliably trigger it),
+/// waits for the user to respond, then sweeps. If the first sweep comes back
+/// empty — the modal dialog would have stalled it into timeouts — it re-sweeps
+/// once automatically. `NSLocalNetworkUsageDescription` is in Info.plist.
+///
+/// Note: printers that broadcast their *own* ad-hoc Wi-Fi hotspot must be
+/// joined from Settings → Wi-Fi first; the sweep can only reach hosts on the
+/// iPhone's current subnet.
 Future<List<NetPrinterDevice>> scanNetwork(
     {List<int> ports = const [9100, 9101]}) async {
   // ---- Pick the best private IPv4 interface (Wi-Fi/LAN first) ----
@@ -268,23 +272,21 @@ Future<List<NetPrinterDevice>> scanNetwork(
     }
   }
 
-  // ---- Probe with bounded parallelism ----
-  const batchSize = 40;
-  const probeTimeout = Duration(milliseconds: 300);
-  final found = <NetPrinterDevice>[];
-  for (var i = 0; i < targets.length; i += batchSize) {
-    final slice =
-        targets.skip(i).take(batchSize).toList(growable: false);
-    await Future.wait(slice.map((t) async {
-      try {
-        final socket = await Socket.connect(t.$1, t.$2,
-            timeout: probeTimeout);
-        await socket.close();
-        found.add(NetPrinterDevice(host: t.$1, port: t.$2));
-      } catch (_) {
-        // Timeout / connection refused: not a printer on this port.
-      }
-    }));
+  // ---- iOS: force the Local Network permission prompt, then give the
+  //      user a beat to respond before the real sweep starts. ----
+  if (Platform.isIOS) {
+    await _triggerLocalNetworkPermission(prefix);
+    await Future.delayed(const Duration(milliseconds: 800));
+  }
+
+  var found = await _sweep(targets);
+
+  // ---- iOS: the modal permission dialog (if it appeared) would have
+  //      stalled the first sweep into timeouts. Now that the user has had
+  //      time to tap Allow, re-sweep once automatically. ----
+  if (Platform.isIOS && found.isEmpty) {
+    await Future.delayed(const Duration(milliseconds: 1500));
+    found = await _sweep(targets);
   }
 
   found.sort((a, b) {
@@ -292,4 +294,56 @@ Future<List<NetPrinterDevice>> scanNetwork(
     return c != 0 ? c : a.port.compareTo(b.port);
   });
   return found;
+}
+
+/// Probe every (host, port) target with bounded parallelism.
+///
+/// A host that accepts the TCP connection on a print port is reported as a
+/// candidate printer; timeouts and refusals are ignored.
+Future<List<NetPrinterDevice>> _sweep(List<(String, int)> targets) async {
+  const batchSize = 40;
+  const probeTimeout = Duration(milliseconds: 400);
+  final found = <NetPrinterDevice>[];
+  for (var i = 0; i < targets.length; i += batchSize) {
+    final slice = targets.skip(i).take(batchSize).toList(growable: false);
+    await Future.wait(slice.map((t) async {
+      try {
+        final socket =
+            await Socket.connect(t.$1, t.$2, timeout: probeTimeout);
+        await socket.close();
+        found.add(NetPrinterDevice(host: t.$1, port: t.$2));
+      } catch (_) {
+        // Timeout / connection refused: not a printer on this port.
+      }
+    }));
+  }
+  return found;
+}
+
+/// Nudge iOS into raising the **Local Network** permission dialog.
+///
+/// A bare TCP-connect sweep does not reliably trigger the prompt on iOS 14+;
+/// Apple's heuristic keys off multicast/broadcast traffic. Firing a UDP
+/// datagram at the subnet broadcast and the limited broadcast address makes
+/// iOS raise the `NSLocalNetworkUsageDescription` dialog, which — once
+/// allowed — lets the subsequent TCP sweep through. Best-effort: any failure
+/// is ignored because the sweep itself will also try.
+Future<void> _triggerLocalNetworkPermission(String prefix) async {
+  RawDatagramSocket? socket;
+  try {
+    socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+    socket.broadcastEnabled = true;
+    final payload = Uint8List.fromList(const [0x00]);
+    for (final target in ['$prefix.255', '255.255.255.255']) {
+      try {
+        socket.send(payload, InternetAddress(target), 9100);
+      } catch (_) {
+        // Ignore — one of the two is enough to raise the prompt.
+      }
+    }
+  } catch (_) {
+    // Best-effort; the sweep below still attempts the connection.
+  } finally {
+    socket?.close();
+  }
 }
