@@ -30,3 +30,7 @@ Future<List<BtPrinterDevice>> listBluetoothPrinters() async {
 Future<void> sendBluetooth(String address, Uint8List bytes) async {
   throw PrinterException('Available in the Android app.');
 }
+
+Future<List<NetPrinterDevice>> scanNetwork() async {
+  throw PrinterException('Available in the Android app.');
+}

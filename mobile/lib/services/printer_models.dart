@@ -38,3 +38,18 @@ class BtPrinterDevice {
   @override
   String toString() => name;
 }
+
+/// A raw ESC/POS printer discovered on the local (Wi-Fi) network.
+///
+/// [host] is the printer's IP and [port] its raw-print port (9100/9101),
+/// which is exactly what [PrinterSettings.host]/[PrinterSettings.port]
+/// need for direct network printing.
+class NetPrinterDevice {
+  final String host;
+  final int port;
+
+  const NetPrinterDevice({required this.host, required this.port});
+
+  @override
+  String toString() => '$host:$port';
+}

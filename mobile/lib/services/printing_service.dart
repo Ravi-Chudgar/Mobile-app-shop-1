@@ -54,6 +54,10 @@ class PrintingService {
     return transports.listBluetoothPrinters();
   }
 
+  Future<List<NetPrinterDevice>> scanNetwork() async {
+    return transports.scanNetwork();
+  }
+
   Uint8List _decodeBytes(Map<String, dynamic> data) {
     final b64 = data['bytes_b64'] as String?;
     if (b64 == null || b64.isEmpty) {

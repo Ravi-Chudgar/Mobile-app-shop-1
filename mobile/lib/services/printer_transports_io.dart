@@ -208,3 +208,88 @@ Future<void> sendBluetooth(String address, Uint8List bytes) async {
     throw PrinterException('Bluetooth operation failed: $e');
   }
 }
+
+/// Discover raw ESC/POS printers on the local (Wi-Fi) network.
+///
+/// Sweeps the device's own /24 subnet on the standard raw-print ports
+/// (9100 and 9101) with a short TCP-connect timeout, probing up to 40
+/// addresses at a time so a full sweep finishes in a few seconds. A host
+/// that accepts the connection on a print port is reported as a candidate
+/// printer.
+///
+/// On iOS the first sweep triggers the system **Local Network** permission
+/// prompt (`NSLocalNetworkUsageDescription` is in Info.plist). While the
+/// prompt is open — or if access was denied — the probes time out and an
+/// empty list comes back; re-running after allowing access finds the
+/// printers.
+Future<List<NetPrinterDevice>> scanNetwork(
+    {List<int> ports = const [9100, 9101]}) async {
+  // ---- Pick the best private IPv4 interface (Wi-Fi/LAN first) ----
+  String base;
+  try {
+    final interfaces = await NetworkInterface.list(
+        includeLoopback: false, includeLinkLocal: false);
+    String? candidate;
+    for (final prefix in ['192.168.', '10.', '172.']) {
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          if (addr.type == InternetAddressType.IPv4 &&
+              addr.address.startsWith(prefix)) {
+            candidate = addr.address;
+            break;
+          }
+        }
+        if (candidate != null) break;
+      }
+      if (candidate != null) break;
+    }
+    if (candidate == null) {
+      throw PrinterException(
+          'No local network connection — connect this device to the '
+          'printer\'s Wi-Fi network first.');
+    }
+    base = candidate;
+  } on PrinterException {
+    rethrow;
+  } catch (e) {
+    throw PrinterException('Network scan failed: $e');
+  }
+
+  // ---- Build the target list (own /24, minus self) ----
+  final octets = base.split('.');
+  final prefix = '${octets[0]}.${octets[1]}.${octets[2]}';
+  final self = base;
+  final targets = <(String, int)>[];
+  for (var i = 1; i <= 254; i++) {
+    final ip = '$prefix.$i';
+    if (ip == self) continue;
+    for (final port in ports) {
+      targets.add((ip, port));
+    }
+  }
+
+  // ---- Probe with bounded parallelism ----
+  const batchSize = 40;
+  const probeTimeout = Duration(milliseconds: 300);
+  final found = <NetPrinterDevice>[];
+  for (var i = 0; i < targets.length; i += batchSize) {
+    final slice =
+        targets.skip(i).take(batchSize).toList(growable: false);
+    await Future.wait(slice.map((t) async {
+      try {
+        final socket = await Socket.connect(t.$1, t.$2,
+            timeout: probeTimeout);
+        await socket.close();
+        found.add(NetPrinterDevice(host: t.$1, port: t.$2));
+      } catch (_) {
+        // Timeout / connection refused: not a printer on this port.
+      }
+    }));
+  }
+
+  found.sort((a, b) {
+    final c = a.host.compareTo(b.host);
+    return c != 0 ? c : a.port.compareTo(b.port);
+  });
+  return found;
+}

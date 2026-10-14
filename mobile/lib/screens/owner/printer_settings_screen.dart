@@ -33,6 +33,9 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   List<BtPrinterDevice> _btDevices = [];
   bool _btScanning = false;
 
+  List<NetPrinterDevice> _netDevices = [];
+  bool _netScanning = false;
+
   @override
   void initState() {
     super.initState();
@@ -124,6 +127,36 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     _settings.btName = dev.name;
     _macCtrl.text = dev.address;
     await _settings.save();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _scanNetwork() async {
+    setState(() {
+      _netScanning = true;
+      _netDevices = [];
+    });
+    try {
+      final devices = await PrintingService.instance.scanNetwork();
+      if (mounted) setState(() => _netDevices = devices);
+    } on PrinterException catch (e) {
+      if (mounted) {
+        setState(() => _netDevices = []);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } catch (e) {
+      if (mounted) setState(() => _netDevices = []);
+    } finally {
+      if (mounted) setState(() => _netScanning = false);
+    }
+  }
+
+  Future<void> _selectNetwork(NetPrinterDevice dev) async {
+    setState(() {
+      _hostCtrl.text = dev.host;
+      _portCtrl.text = dev.port.toString();
+    });
+    await _saveNetwork();
     if (mounted) setState(() {});
   }
 
@@ -255,35 +288,10 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                 const SizedBox(height: 8),
                 if (_settings.mode == PrinterMode.network) ...[
                   const SectionHeader(
-                    title: 'Network Settings',
-                    subtitle: 'Enter the printer IP and port',
+                    title: 'Network Printer',
+                    subtitle: 'Search the Wi-Fi network or enter the IP manually',
                   ),
-                  TextField(
-                    controller: _hostCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'IP Address',
-                      hintText: '192.168.1.100',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.router_outlined),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _portCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Port',
-                      hintText: '9100',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.settings_ethernet),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton.tonal(
-                    onPressed: _saveNetwork,
-                    child: const Text('Save Network Settings'),
-                  ),
+                  _networkContent(scheme),
                 ],
                 if (_settings.mode == PrinterMode.usb) ...[
                   const SectionHeader(
@@ -506,6 +514,92 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
               child: const Text('Save'),
             ),
           ],
+        ),
+      ],
+    );
+  }
+
+  Widget _networkContent(ColorScheme scheme) {
+    final isWeb = _isWeb();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_settings.host.isNotEmpty)
+          _SelectedBadge(
+            label: '${_settings.host}:${_settings.port}',
+            sub: 'Network printer · raw ESC/POS',
+            gradient: CafeGradients.sky,
+            icon: Icons.router_outlined,
+          ),
+        const SizedBox(height: 8),
+
+        // LAN discovery needs dart:io sockets — not possible in a browser.
+        if (!isWeb) ...[
+          OutlinedButton.icon(
+            onPressed: _netScanning ? null : _scanNetwork,
+            icon: _netScanning
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.search, size: 18),
+            label: Text(
+                _netScanning ? 'Searching network…' : 'Search Network Printers'),
+          ),
+          if (_netDevices.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            for (final dev in _netDevices)
+              _DeviceTile(
+                title: dev.host,
+                subtitle: 'Port ${dev.port} · raw ESC/POS',
+                icon: Icons.router_outlined,
+                selected: _settings.host == dev.host &&
+                    _settings.port == dev.port,
+                onTap: () => _selectNetwork(dev),
+              ),
+          ] else if (!_netScanning) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Tap Search to find printers on this Wi-Fi network. '
+              'On iPhone, allow Local Network access when asked.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ],
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+        ],
+
+        // Manual entry stays available everywhere (the web app prints
+        // through the server).
+        TextField(
+          controller: _hostCtrl,
+          decoration: const InputDecoration(
+            labelText: 'IP Address',
+            hintText: '192.168.1.100',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.router_outlined),
+          ),
+          keyboardType: TextInputType.number,
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _portCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Port',
+            hintText: '9100',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.settings_ethernet),
+          ),
+          keyboardType: TextInputType.number,
+        ),
+        const SizedBox(height: 12),
+        FilledButton.tonal(
+          onPressed: _saveNetwork,
+          child: const Text('Save Network Settings'),
         ),
       ],
     );
