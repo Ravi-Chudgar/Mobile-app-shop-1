@@ -82,7 +82,18 @@ class AuthState extends ChangeNotifier {
     name = null;
     tenant = null;
     _api.token = null;
-    await _storage.delete(key: _key);
+    // Best-effort keychain cleanup. A throw or a hang here must NEVER
+    // block notifyListeners(): RootGate only swaps back to the login
+    // screen on that notification, and a keychain error (e.g. a stale
+    // item left behind by a previous install under a different signing
+    // identity) used to abort logout() early and make the button look
+    // dead.
+    try {
+      await _storage.delete(key: _key).timeout(const Duration(seconds: 3));
+    } catch (_) {
+      // Ignore — worst case the next cold start re-reads a stale
+      // session; all in-memory state is already cleared above.
+    }
     notifyListeners();
   }
 }
