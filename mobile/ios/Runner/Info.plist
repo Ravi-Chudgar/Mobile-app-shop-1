@@ -30,8 +30,15 @@
 	<true/>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>This app needs Bluetooth permissions to connect to and communicate with thermal printers.</string>
-	<key>NSBluetoothUsageDescription</key>
+	<!-- Required by iOS 13+ for ALL CoreBluetooth access (CBCentralManager).
+	     Without this exact key iOS SIGKILLs the app the moment Bluetooth is
+	     touched ("attempted to access privacy-sensitive data without a usage
+	     description"). NSBluetoothPeripheralUsageDescription only covers iOS 12
+	     and earlier; NSBluetoothUsageDescription is not a real Apple key. -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>This app needs Bluetooth permissions to scan for and connect to nearby printers.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>This app needs local network access to send print jobs to printers on your Wi-Fi network.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>This app needs location permissions to scan for nearby Bluetooth devices.</string>
 	<key>NSLocationAlwaysUsageDescription</key>

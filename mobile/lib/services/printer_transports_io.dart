@@ -35,10 +35,27 @@ export 'printer_models.dart';
 /// Throws a [PrinterException] with a platform-appropriate message if the
 /// required permissions are not granted after requesting them.
 Future<void> _ensureBluetoothPermission() async {
-  // ---- iOS: Permission.bluetooth triggers the NSBluetoothUsageDescription
-  // dialog. On Android this maps to BLUETOOTH_CONNECT (API 31+) and is a
-  // no-op on older Android versions. Request it FIRST so the iOS dialog
-  // appears before the Location dialog.
+  // ---- iOS -------------------------------------------------------------
+  // Only Permission.bluetooth exists here: it maps to CoreBluetooth and
+  // triggers the NSBluetoothAlwaysUsageDescription dialog. The Android-only
+  // groups (bluetoothScan/bluetoothConnect) are dispatched to permission_
+  // handler's UnknownPermissionStrategy on iOS, which reports DENIED no
+  // matter what — requiring them would fail the verification forever.
+  // Location isn't needed for CoreBluetooth scanning on iOS either.
+  if (Platform.isIOS) {
+    var status = await Permission.bluetooth.status;
+    if (!status.isGranted) {
+      status = await Permission.bluetooth.request();
+    }
+    if (status.isGranted) return;
+    throw PrinterException(
+        'Bluetooth permission not granted — enable Bluetooth for this app in '
+        'Settings → Privacy & Security → Bluetooth, then try again.');
+  }
+
+  // ---- Android ---------------------------------------------------------
+  // On Android this maps to BLUETOOTH_CONNECT (API 31+) and is a no-op on
+  // older Android versions.
   var bluetoothStatus = await Permission.bluetooth.status;
   if (!bluetoothStatus.isGranted) {
     bluetoothStatus = await Permission.bluetooth.request();
@@ -68,9 +85,7 @@ Future<void> _ensureBluetoothPermission() async {
     locationCoarseStatus = await Permission.locationAlways.request();
   }
 
-  // ---- Verify all required permissions are granted ----
-  // On iOS: only bluetooth + location matter (androidScan/Connect are no-ops)
-  // On Android: all four matter
+  // ---- Verify all required permissions are granted (Android) ----
   if (bluetoothStatus.isGranted &&
       bluetoothScanStatus.isGranted &&
       bluetoothConnectStatus.isGranted &&
