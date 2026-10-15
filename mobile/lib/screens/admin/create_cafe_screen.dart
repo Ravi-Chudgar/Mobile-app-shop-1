@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../services/api_client.dart';
+import '../../widgets/credentials_share.dart';
 
 /// Register a new cafe together with its owner account (platform admin only).
 /// On success the route pops with `true` so the dashboard refreshes.
@@ -28,6 +29,11 @@ class _CreateCafeScreenState extends State<CreateCafeScreen> {
   final _phone = TextEditingController();
 
   bool _saving = false;
+
+  /// Set once the cafe exists: the credentials are shown (and shareable) here,
+  /// because this is the only moment the plaintext password is known — the
+  /// backend never returns a stored password afterwards.
+  Map<String, String>? _created;
 
   @override
   void dispose() {
@@ -66,10 +72,18 @@ class _CreateCafeScreenState extends State<CreateCafeScreen> {
         'phone': _phone.text.trim(),
       });
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cafe “${_name.text.trim()}” created')),
-      );
-      Navigator.of(context).pop(true);
+      // Keep the screen open on a success panel with the login details to hand
+      // to the owner (Share / Copy). "Done" pops with `true` so the dashboard
+      // refreshes.
+      setState(() {
+        _saving = false;
+        _created = {
+          'cafeName': _name.text.trim(),
+          'cafeCode': _slug.text.trim().toLowerCase(),
+          'username': _ownerUser.text.trim().toLowerCase(),
+          'password': _ownerPass.text,
+        };
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -83,6 +97,8 @@ class _CreateCafeScreenState extends State<CreateCafeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final created = _created;
+    if (created != null) return _successView(context, created);
     final text = Theme.of(context).textTheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Add cafe')),
@@ -187,6 +203,47 @@ class _CreateCafeScreenState extends State<CreateCafeScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Shown after the cafe exists: a confirmation plus the owner's login details
+  /// with Share / Copy so the admin can hand them over in one tap.
+  Widget _successView(BuildContext context, Map<String, String> created) {
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Cafe created')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+        children: [
+          Icon(Icons.check_circle_rounded, size: 64, color: scheme.primary),
+          const SizedBox(height: 12),
+          Text(
+            '“${created['cafeName']}” is ready',
+            textAlign: TextAlign.center,
+            style: text.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Send these login details to the owner so they can sign in '
+            'on their phone.',
+            textAlign: TextAlign.center,
+            style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 20),
+          CredentialsCard(
+            cafeName: created['cafeName'] ?? '',
+            cafeCode: created['cafeCode'] ?? '',
+            username: created['username'] ?? '',
+            password: created['password'],
+          ),
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Done'),
+          ),
+        ],
       ),
     );
   }

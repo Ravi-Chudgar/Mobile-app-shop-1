@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../services/api_client.dart';
 import '../../state/auth_state.dart';
 import '../../util/money.dart';
+import '../../widgets/credentials_share.dart';
 import '../../widgets/ui_kit.dart';
 import 'create_cafe_screen.dart';
 
@@ -80,6 +81,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     if (created == true) _load();
   }
 
+  /// Opens the share sheet with this cafe's owner login. The password can't be
+  /// re-shown here (only hashed server-side), so the card refers back to the
+  /// password chosen when the cafe was created.
+  Future<void> _shareLogin(Map<String, dynamic> cafe) async {
+    final name = (cafe['display_name'] as String? ?? '').isNotEmpty
+        ? cafe['display_name'] as String
+        : (cafe['slug'] as String? ?? '');
+    final message = credentialsMessage(
+      cafeName: name,
+      cafeCode: cafe['slug'] as String? ?? '',
+      username: cafe['owner_username'] as String? ?? '',
+      password: null,
+    );
+    await shareMessage(context, message, title: 'Cafe POS login — $name');
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
@@ -120,6 +137,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   cafe: _cafes[i],
                   busy: _actingSlug == _cafes[i]['slug'],
                   onManage: () => _manage(_cafes[i]),
+                  onShare: () => _shareLogin(_cafes[i]),
                 ),
               ),
       ),
@@ -134,11 +152,13 @@ class _CafeCard extends StatelessWidget {
     required this.cafe,
     required this.busy,
     required this.onManage,
+    required this.onShare,
   });
 
   final Map<String, dynamic> cafe;
   final bool busy;
   final VoidCallback onManage;
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -217,19 +237,28 @@ class _CafeCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: busy ? null : onManage,
-                icon: busy
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.tune_rounded, size: 18),
-                label: Text(busy ? 'Opening…' : 'Manage this cafe'),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: busy ? null : onManage,
+                    icon: busy
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.tune_rounded, size: 18),
+                    label: Text(busy ? 'Opening…' : 'Manage this cafe'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: onShare,
+                  icon: const Icon(Icons.share_rounded, size: 16),
+                  label: const Text('Login'),
+                ),
+              ],
             ),
           ],
         ),

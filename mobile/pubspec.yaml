@@ -25,6 +25,8 @@ dependencies:
   usb_serial: ^0.5.2
   print_bluetooth_thermal: ^1.2.1
   permission_handler: ^13.0.2
+  # Native share sheet (hand a cafe's login credentials to its owner).
+  share_plus: ^12.0.2
 
 dev_dependencies:
   flutter_test:
