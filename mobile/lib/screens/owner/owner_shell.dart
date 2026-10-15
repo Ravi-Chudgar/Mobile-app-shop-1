@@ -280,7 +280,14 @@ class _OwnerShellState extends State<OwnerShell> {
           ),
         ],
       ),
-      body: IndexedStack(index: _index, children: _pages),
+      body: Column(
+        children: [
+          if (auth.isActingAsOwner) _ImpersonationBanner(auth: auth),
+          Expanded(
+            child: IndexedStack(index: _index, children: _pages),
+          ),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
@@ -366,6 +373,48 @@ class _MoreTile extends StatelessWidget {
                 ),
               ),
               const Icon(Icons.chevron_right, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown at the top of the owner shell while a platform admin is managing a
+/// cafe in owner mode ("act as owner"). Tapping it returns to the cafe list.
+class _ImpersonationBanner extends StatelessWidget {
+  const _ImpersonationBanner({required this.auth});
+
+  final AuthState auth;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFFFF3E0),
+      child: InkWell(
+        onTap: () => auth.exitToAdmin(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          child: Row(
+            children: [
+              const Icon(Icons.admin_panel_settings_rounded,
+                  size: 18, color: Color(0xFFB26A00)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Managing ${auth.actingCafeName ?? 'cafe'} — tap to return '
+                  'to all cafes',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF7A4700),
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Icon(Icons.close_rounded, size: 18, color: Color(0xFFB26A00)),
             ],
           ),
         ),

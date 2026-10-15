@@ -6,6 +6,8 @@ Roles (Phase 4):
     staff    - take/serve orders
     kitchen  - order display
     cafe_ca  - chartered accountant, READ-ONLY (accounting bridge).
+    admin    - platform admin: owns no cafe, SEES & CONTROLS ALL cafes
+               (separate env-seeded login; /platform/* routes).
 
 Multi-tenancy: `authenticate` scopes the login to one tenant's staff table
 and the issued JWT carries a `tenant` claim; `_guard` restores it onto
@@ -18,6 +20,7 @@ that, app/routes/ca_guard.py installs a global before-request hook that
 refuses every non-GET request made with a cafe_ca token, so the CA login can
 never perform a mutation even if a route forgot to check.
 """
+import hmac
 import time
 from functools import wraps
 
@@ -31,8 +34,9 @@ from .util import ApiError
 
 
 # Valid account roles. `cafe_ca` is the read-only chartered-accountant login
-# added in Phase 4 (accounting bridge).
-VALID_ROLES = ("owner", "staff", "kitchen", "cafe_ca")
+# added in Phase 4 (accounting bridge). `admin` is the platform admin: it owns
+# no cafe and sees/controls ALL of them (separate env-seeded login).
+VALID_ROLES = ("owner", "staff", "kitchen", "cafe_ca", "admin")
 # Roles that must never perform a write (enforced globally by ca_guard.py).
 READ_ONLY_ROLES = ("cafe_ca",)
 
@@ -65,6 +69,25 @@ def decode_token(token):
     return jwt.decode(token, Config.JWT_SECRET, algorithms=["HS256"])
 
 
+def _platform_admin_matches(username, password):
+    """True when (username, password) equal the env-seeded platform admin.
+
+    The platform admin belongs to no cafe: it is configured in the server env
+    (PLATFORM_ADMIN_USER / PLATFORM_ADMIN_PASSWORD) and, when the password is
+    empty, the login is disabled. Both fields are compared in constant time so
+    neither can be guessed by timing.
+    """
+    puser = (Config.PLATFORM_ADMIN_USER or "").strip().lower()
+    ppwd = Config.PLATFORM_ADMIN_PASSWORD or ""
+    if not puser or not ppwd:
+        return False
+    user_ok = hmac.compare_digest(username.encode("utf-8"),
+                                  puser.encode("utf-8"))
+    pwd_ok = hmac.compare_digest(str(password or "").encode("utf-8"),
+                                 ppwd.encode("utf-8"))
+    return user_ok and pwd_ok
+
+
 def authenticate(username, password, tenant=None):
     """Validate credentials against `tenant`'s staff table.
 
@@ -79,6 +102,20 @@ def authenticate(username, password, tenant=None):
     """
     from .repositories import staff as staff_repo
     from .repositories import tenants as tenants_repo
+
+    username = (username or "").strip().lower()
+
+    # Platform admin: an env-seeded login that owns no cafe. Checked first so
+    # it works with no tenant context; returns a role=admin token. The platform
+    # routes it uses resolve tenants explicitly, never g.tenant.
+    if _platform_admin_matches(username, password):
+        return {
+            "token": issue_token(username, "admin"),
+            "role": "admin",
+            "name": username,
+            "username": username,
+            "tenant": None,
+        }
 
     slug = tenant or Config.DEFAULT_TENANT
     slug = str(slug).strip()
@@ -159,3 +196,8 @@ any_required = _guard({"owner", "staff", "kitchen"})
 # CA-only routes (none today, kept for symmetry).
 cafe_ca_required = _guard({"cafe_ca"})
 owner_or_ca = _guard({"owner", "cafe_ca"})
+
+# Platform admin — cross-cafe management (list/create cafes, act as any cafe's
+# owner). Its token is never scoped to one cafe's data: the /platform/* routes
+# resolve tenants explicitly with tenant_scope(slug).
+admin_required = _guard({"admin"})

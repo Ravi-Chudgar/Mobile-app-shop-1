@@ -6,8 +6,21 @@ from typing import Optional, Any, List, Dict
 
 import redis
 
+from .tenancy import current_tenant
+
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 _redis: Optional[redis.Redis] = None
+
+
+def _full_key(namespace: str, key: str) -> str:
+    """Tenant-scoped cache key.
+
+    Every cached value (menu, orders, loyalty, daily summaries, ...) is
+    per-cafe data, so the current tenant is part of the key. Without it two
+    cafes touching the same date/item would share one cached row and leak
+    across the tenant boundary.
+    """
+    return f"pos:{namespace}:{current_tenant()}:{key}"
 
 
 def get_redis() -> redis.Redis:
@@ -31,7 +44,7 @@ def _serialize_value(value: Any) -> str:
 def cache_get(key: str, namespace: str = "pos") -> Optional[Any]:
     """Get a value from the cache. Returns None if not found."""
     r = get_redis()
-    full_key = f"pos:{namespace}:{key}"
+    full_key = _full_key(namespace, key)
     raw = r.get(full_key)
     if raw is None:
         return None
@@ -49,7 +62,7 @@ def cache_set(key: str, value: Any, ttl: int = 300, namespace: str = "pos") -> N
     cannot store Python collections directly.
     """
     r = get_redis()
-    full_key = f"pos:{namespace}:{key}"
+    full_key = _full_key(namespace, key)
     serialized = _serialize_value(value)
     r.setex(full_key, ttl, serialized)
 
@@ -57,35 +70,35 @@ def cache_set(key: str, value: Any, ttl: int = 300, namespace: str = "pos") -> N
 def cache_del(key: str, namespace: str = "pos") -> None:
     """Delete a key from the cache."""
     r = get_redis()
-    full_key = f"pos:{namespace}:{key}"
+    full_key = _full_key(namespace, key)
     r.delete(full_key)
 
 
 def cache_exists(key: str, namespace: str = "pos") -> bool:
     """Check if a key exists in the cache."""
     r = get_redis()
-    full_key = f"pos:{namespace}:{key}"
+    full_key = _full_key(namespace, key)
     return r.exists(full_key)
 
 
 def cache_incr(key: str, amount: int = 1, namespace: str = "pos") -> int:
     """Increment a counter in the cache."""
     r = get_redis()
-    full_key = f"pos:{namespace}:{key}"
+    full_key = _full_key(namespace, key)
     return r.incr(full_key, amount)
 
 
 def cache_keys(pattern: str, namespace: str = "pos") -> List[str]:
-    """Get all keys matching a pattern in a namespace."""
+    """Get all keys matching a pattern in a namespace (current tenant only)."""
     r = get_redis()
-    full_pattern = f"pos:{namespace}:{pattern}"
+    full_pattern = f"pos:{namespace}:{current_tenant()}:{pattern}"
     return r.keys(full_pattern)
 
 
 def clear_namespace(namespace: str = "pos") -> int:
-    """Clear all keys in a namespace."""
+    """Clear all keys in a namespace (current tenant only)."""
     r = get_redis()
-    full_pattern = f"pos:{namespace}:*"
+    full_pattern = f"pos:{namespace}:{current_tenant()}:*"
     keys = r.keys(full_pattern)
     if keys:
         r.delete(*keys)

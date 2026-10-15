@@ -13,6 +13,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/ca/ca_shell.dart';
 import 'screens/customer/menu_screen.dart';
 import 'screens/owner/owner_shell.dart';
+import 'screens/admin/admin_shell.dart';
 import 'screens/staff/staff_shell.dart';
 import 'screens/kitchen/kitchen_shell.dart';
 
@@ -287,6 +288,7 @@ class RootGate extends StatelessWidget {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (!auth.isLoggedIn) return const LoginScreen();
+    if (auth.isAdmin) return const AdminShell();
     if (auth.isOwner) return const OwnerShell();
     if (auth.role == 'cafe_ca') return const CaShell();
     if (auth.isKitchen) return const KitchenShell();

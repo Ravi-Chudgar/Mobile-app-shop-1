@@ -256,22 +256,14 @@ def delete_inventory_item(item_id):
 
 # ---- Profit / Loss report ---------------------------------------------------
 
-@bp.get("/reports/profit-loss")
-@owner_required
-def profit_loss():
-    """Profit/loss report using actual COGS from collected orders."""
-    month_str = request.args.get("month")
-    target = None
-    if month_str:
-        for fmt in ("%Y-%m-%d", "%Y-%m"):
-            try:
-                target = datetime.strptime(month_str, fmt)
-                break
-            except ValueError:
-                continue
-    if target is None:
-        target = datetime.now(timezone.utc)
+def compute_profit_loss(target):
+    """Profit/loss for the CURRENT tenant in the calendar month `target`.
 
+    Extracted from the route below so the platform-admin cafe list can reuse
+    the exact same computation for every cafe (called inside a
+    `tenant_scope(slug)`). Takes a parsed month, no Flask request — returns
+    the plain response dict; the tenant must already be bound.
+    """
     year, month = target.year, target.month
     # Real calendar days (February has 28/29, March has 31, ...).
     days_in_month = calendar.monthrange(year, month)[1]
@@ -321,7 +313,7 @@ def profit_loss():
             f"(3) increase prices on low-margin items."
         )
 
-    return jsonify({
+    return {
         "total_sales": total_sales,
         "revenue": revenue,
         "total_cost": total_cogs,
@@ -334,7 +326,25 @@ def profit_loss():
         "total_orders": total_orders,
         "days_in_month": days_in_month,
         "suggestion": suggestion,
-    })
+    }
+
+
+@bp.get("/reports/profit-loss")
+@owner_required
+def profit_loss():
+    """Profit/loss report using actual COGS from collected orders."""
+    month_str = request.args.get("month")
+    target = None
+    if month_str:
+        for fmt in ("%Y-%m-%d", "%Y-%m"):
+            try:
+                target = datetime.strptime(month_str, fmt)
+                break
+            except ValueError:
+                continue
+    if target is None:
+        target = datetime.now(timezone.utc)
+    return jsonify(compute_profit_loss(target))
 
 
 # --- Cafe profile (business identity printed on bills) ----------------------

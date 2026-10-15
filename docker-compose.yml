@@ -61,6 +61,10 @@ services:
       SEED_ADMIN_USER: ${SEED_ADMIN_USER:-owner}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-cafe123}
       SEED_ON_START: ${SEED_ON_START:-1}
+      # Platform admin — a separate login that sees & controls ALL cafes.
+      # Empty password = the admin login is disabled.
+      PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-admin}
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
       # Thermal printer (raw ESC/POS over TCP, usually port 9100).
       # Empty host = dry-run mode (returns bytes, prints nothing).
       ESCPOS_PRINTER_HOST: ${ESCPOS_PRINTER_HOST:-}
@@ -101,6 +105,12 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    # The Cloudflare dashboard ingress rule for this tunnel targets
+    # http://localhost:9999. That only resolves to the backend when cloudflared
+    # shares the HOST network namespace — under bridge networking (default),
+    # localhost means the cloudflared container itself and every request 502s
+    # with "connection refused".
+    network_mode: host
     command: ["tunnel", "--no-autoupdate", "run", "--token",
               "${TUNNEL_TOKEN:-}"]
 

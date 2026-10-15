@@ -349,6 +349,29 @@ class ApiClient {
     return data;
   }
 
+  // ---- Platform admin (cross-cafe; role=admin) ----
+  /// Every cafe with owner details + current-month profit & loss.
+  Future<Map<String, dynamic>> platformListCafes() async {
+    final data = await _get('/platform/tenants') as Map<String, dynamic>;
+    return data;
+  }
+
+  /// Register a new cafe + its owner account. Returns {message, tenant, ...}.
+  Future<Map<String, dynamic>> platformCreateCafe(
+      Map<String, dynamic> payload) async {
+    final data = await _send('POST', '/platform/tenants', payload)
+        as Map<String, dynamic>;
+    return data;
+  }
+
+  /// Ask the backend for a full OWNER token for [slug] so the admin can manage
+  /// that cafe. Returns {token, role, tenant, username, name}.
+  Future<Map<String, dynamic>> platformActAs(String slug) async {
+    final data = await _send('POST', '/platform/tenants/$slug/act-as', {})
+        as Map<String, dynamic>;
+    return data;
+  }
+
   Future<void> deleteMenuItem(String id) async {
     await _send('DELETE', '/admin/menu/$id', null);
   }

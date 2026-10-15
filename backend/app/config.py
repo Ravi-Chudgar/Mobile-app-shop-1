@@ -28,6 +28,13 @@ class Config:
     JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
     JWT_TTL_HOURS = int(os.getenv("JWT_TTL_HOURS", "12"))
 
+    # --- Platform admin (sees & controls ALL cafes; see auth.py) ---
+    # A separate login that owns no cafe. Disabled while the password is empty
+    # so a fresh deploy never ships with an open admin. The username must be
+    # >= 3 chars and the password >= 6 chars (the login validator enforces it).
+    PLATFORM_ADMIN_USER = os.getenv("PLATFORM_ADMIN_USER", "admin")
+    PLATFORM_ADMIN_PASSWORD = os.getenv("PLATFORM_ADMIN_PASSWORD", "")
+
     PRESIGN_TTL = int(os.getenv("PRESIGN_TTL", "3600"))
 
     # Number of tables created on first boot.
