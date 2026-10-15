@@ -16,6 +16,7 @@ from flask import Blueprint, request, jsonify
 
 from .. import infra
 from ..auth import admin_required, issue_token
+from ..ratelimit import limit
 from ..repositories import staff as staff_repo
 from ..repositories import tenants as tenants_repo
 from ..tenancy import tenant_scope
@@ -87,6 +88,9 @@ def get_tenant(slug):
 
 @bp.post("/tenants")
 @admin_required
+# Creating a cafe is rare, so this stays tight — it also blunts scripted
+# attempts to mass-provision cafes/owner accounts.
+@limit("10 per minute")
 def create_tenant():
     """Register a new cafe and seed its owner account + starter menu.
 
@@ -137,6 +141,7 @@ def create_tenant():
 
 @bp.post("/tenants/<slug>/act-as")
 @admin_required
+@limit("30 per minute")
 def act_as(slug):
     """Issue an OWNER token for cafe `slug` so the admin manages it with full
     owner rights. The app swaps to this token and can swap back by keeping the

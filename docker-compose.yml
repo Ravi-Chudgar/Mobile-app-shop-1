@@ -65,6 +65,13 @@ services:
       # Empty password = the admin login is disabled.
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-admin}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
+      # Rate limiting on sensitive routes (login, cafe creation, signup).
+      # "0" disables it entirely (e.g. load tests).
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-1}
+      # gunicorn runs 2 workers; each has its own memory limiter, so store
+      # counters in Redis (its own DB, away from the cache) to share ONE budget
+      # across workers. Host-run tests leave this unset -> memory:// per process.
+      RATE_LIMIT_STORAGE: ${RATE_LIMIT_STORAGE:-redis://redis:6379/4}
       # Thermal printer (raw ESC/POS over TCP, usually port 9100).
       # Empty host = dry-run mode (returns bytes, prints nothing).
       ESCPOS_PRINTER_HOST: ${ESCPOS_PRINTER_HOST:-}

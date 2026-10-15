@@ -8,6 +8,10 @@ from flask import Flask, jsonify, request, make_response
 
 from .util import ApiError
 from .cache import cache_get, cache_set, cache_exists
+# Per-endpoint rate limiting (login, cafe creation, ...). The previous
+# in-module limiter referenced CACHE_AVAILABLE before it was defined, so the
+# NameError was swallowed and rate limiting never actually ran.
+from .ratelimit import init_app as _init_rate_limiter
 
 load_dotenv()  # load backend/.env if present
 
@@ -15,28 +19,13 @@ load_dotenv()  # load backend/.env if present
 # tokens, not cookies). Set CORS_ORIGINS to a comma-separated list in prod.
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 
-# Rate limiter — limits API calls per IP to prevent abuse.
-# Uses Redis if available, otherwise falls back to in-memory storage.
-try:
-    from flask_limiter import Limiter
-    from flask_limiter.util import get_remote_address
-    _limiter = Limiter(
-        key_func=get_remote_address,
-        default_limits=["200 per day", "50 per hour"],
-        storage_uri="redis://redis:6379/1" if CACHE_AVAILABLE else "memory://",
-    )
-    CACHE_AVAILABLE = True
-except Exception:  # pragma: no cover
-    _limiter = None
-    CACHE_AVAILABLE = False
-
 
 def create_app():
     app = Flask(__name__)
 
-    # Initialize rate limiter
-    if _limiter is not None:
-        _limiter.init_app(app)
+    # Attach per-endpoint rate limiting (a no-op if Flask-Limiter is absent or
+    # RATE_LIMIT_ENABLED=0).
+    _init_rate_limiter(app)
 
     # Auto-register every blueprint in app/routes/*: each module exposes a
     # module-level `bp`. Adding a new route file needs no edit here, which

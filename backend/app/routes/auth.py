@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify
 
 from ..auth import authenticate
 from ..config import Config
+from ..ratelimit import account_key, limit
 from ..repositories import staff as staff_repo
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -25,6 +26,9 @@ def _validate_login_data(data):
 
 
 @bp.post("/login")
+# Brute-force protection, keyed per account (IP + username) so a shared cafe
+# NAT never locks out other staff while password guessing stays capped.
+@limit("20 per minute", key_func=account_key)
 def login():
     """Body: {username, password, tenant?}. `tenant` is the business code
     (default Config.DEFAULT_TENANT) — the returned JWT carries it as a
@@ -38,6 +42,9 @@ def login():
 
 
 @bp.post("/register")
+# Public self-signup — the strictest limit; owners add staff via /admin/staff
+# instead, so normal operation never approaches it.
+@limit("5 per minute")
 def register():
     """A new staff member signs up; they stay 'pending' until the owner
     approves them."""

@@ -22,6 +22,7 @@ class _CreateCafeScreenState extends State<CreateCafeScreen> {
   final _ownerName = TextEditingController();
   final _ownerUser = TextEditingController();
   final _ownerPass = TextEditingController();
+  final _ownerPass2 = TextEditingController(); // confirm-password
   final _gstin = TextEditingController();
   final _pan = TextEditingController();
   final _license = TextEditingController();
@@ -29,6 +30,9 @@ class _CreateCafeScreenState extends State<CreateCafeScreen> {
   final _phone = TextEditingController();
 
   bool _saving = false;
+
+  /// Shared show/hide toggle for both password fields.
+  bool _obscurePass = true;
 
   /// Set once the cafe exists: the credentials are shown (and shareable) here,
   /// because this is the only moment the plaintext password is known — the
@@ -38,7 +42,7 @@ class _CreateCafeScreenState extends State<CreateCafeScreen> {
   @override
   void dispose() {
     for (final c in [
-      _slug, _name, _ownerName, _ownerUser, _ownerPass,
+      _slug, _name, _ownerName, _ownerUser, _ownerPass, _ownerPass2,
       _gstin, _pan, _license, _address, _phone,
     ]) {
       c.dispose();
@@ -51,6 +55,70 @@ class _CreateCafeScreenState extends State<CreateCafeScreen> {
     final s = (v ?? '').trim();
     if (s.isEmpty) return '${label ?? 'This field'} is required';
     if (s.length < min) return '${label ?? 'This field'} must be at least $min characters';
+    return null;
+  }
+
+  // ---- field validators (all shown live via AutovalidateMode.onUserInteraction)
+
+  String? _validateSlug(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return 'Cafe code is required';
+    if (s.length < 2) return 'Cafe code must be at least 2 characters';
+    if (!RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(s)) {
+      return 'Cafe code: letters, numbers, - and _ only (no spaces)';
+    }
+    return null;
+  }
+
+  String? _validateUsername(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return 'Owner username is required';
+    if (s.length < 3) return 'Owner username must be at least 3 characters';
+    if (!RegExp(r'^[A-Za-z0-9_.]+$').hasMatch(s)) {
+      return 'Username: letters, numbers, . and _ only (no spaces)';
+    }
+    return null;
+  }
+
+  String? _validatePassword(String? v) {
+    final s = v ?? '';
+    if (s.isEmpty) return 'Owner password is required';
+    if (s.length < 6) return 'Owner password must be at least 6 characters';
+    return null;
+  }
+
+  String? _validateConfirm(String? v) {
+    if ((v ?? '').isEmpty) return 'Please re-enter the password';
+    if (v != _ownerPass.text) return "Passwords don't match";
+    return null;
+  }
+
+  // Optional business-detail fields: only checked when filled in, so a cafe
+  // that has no GSTIN yet can still be created.
+  String? _validatePhone(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return null;
+    if (!RegExp(r'^[0-9+\-() ]{7,16}$').hasMatch(s)) {
+      return 'Enter a valid phone number';
+    }
+    return null;
+  }
+
+  String? _validateGstin(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return null;
+    if (!RegExp(r'^[0-9A-Za-z]{15}$').hasMatch(s)) {
+      return 'GSTIN must be 15 characters';
+    }
+    return null;
+  }
+
+  String? _validatePan(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return null;
+    if (!RegExp(r'^[A-Za-z]{5}[0-9]{4}[A-Za-z]$').hasMatch(s)) {
+      return 'PAN must look like ABCDE1234F';
+    }
     return null;
   }
 
@@ -104,6 +172,8 @@ class _CreateCafeScreenState extends State<CreateCafeScreen> {
       appBar: AppBar(title: const Text('Add cafe')),
       body: Form(
         key: _formKey,
+        // Errors show up as the user types, not only after "Create cafe".
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: ListView(
           controller: _scroll,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -117,7 +187,7 @@ class _CreateCafeScreenState extends State<CreateCafeScreen> {
                 hintText: 'e.g. chaitime (used to log in)',
               ),
               textInputAction: TextInputAction.next,
-              validator: (v) => _required(v, 2, 'Cafe code'),
+              validator: _validateSlug,
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -136,18 +206,45 @@ class _CreateCafeScreenState extends State<CreateCafeScreen> {
                 hintText: 'min 3 characters',
               ),
               textInputAction: TextInputAction.next,
-              validator: (v) => _required(v, 3, 'Owner username'),
+              validator: _validateUsername,
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _ownerPass,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Owner password *',
                 hintText: 'min 6 characters',
+                suffixIcon: IconButton(
+                  icon: Icon(_obscurePass
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded),
+                  tooltip: _obscurePass ? 'Show password' : 'Hide password',
+                  onPressed: () =>
+                      setState(() => _obscurePass = !_obscurePass),
+                ),
               ),
-              obscureText: true,
+              obscureText: _obscurePass,
               textInputAction: TextInputAction.next,
-              validator: (v) => _required(v, 6, 'Owner password'),
+              validator: _validatePassword,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _ownerPass2,
+              decoration: InputDecoration(
+                labelText: 'Confirm password *',
+                hintText: 're-enter it',
+                suffixIcon: IconButton(
+                  icon: Icon(_obscurePass
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded),
+                  tooltip: _obscurePass ? 'Show password' : 'Hide password',
+                  onPressed: () =>
+                      setState(() => _obscurePass = !_obscurePass),
+                ),
+              ),
+              obscureText: _obscurePass,
+              textInputAction: TextInputAction.next,
+              validator: _validateConfirm,
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -163,12 +260,14 @@ class _CreateCafeScreenState extends State<CreateCafeScreen> {
               controller: _gstin,
               decoration: const InputDecoration(labelText: 'GSTIN'),
               textInputAction: TextInputAction.next,
+              validator: _validateGstin,
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _pan,
               decoration: const InputDecoration(labelText: 'PAN'),
               textInputAction: TextInputAction.next,
+              validator: _validatePan,
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -189,6 +288,7 @@ class _CreateCafeScreenState extends State<CreateCafeScreen> {
               decoration: const InputDecoration(labelText: 'Phone'),
               keyboardType: TextInputType.phone,
               textInputAction: TextInputAction.done,
+              validator: _validatePhone,
             ),
             const SizedBox(height: 28),
             FilledButton(
