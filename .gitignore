@@ -26,3 +26,8 @@ mobile/ios/Pods/
 .DS_Store
 *.log
 .claude/settings.local.json
+
+# Secrets — never commit (keep .env.example in sync instead)
+.env
+.env.local
+.env.*.local

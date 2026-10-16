@@ -54,6 +54,10 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       JWT_TTL_HOURS: ${JWT_TTL_HOURS:-12}
+      # Browser origins allowed to call the API cross-origin (comma-separated).
+      # Anything else gets no Access-Control-Allow-Origin header. The native iOS
+      # app ignores this entirely (CORS is browser-only).
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://mobileapp.unonomercysound.online,http://localhost:9999,http://127.0.0.1:9999}
       # Ollama on the host machine.
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}

@@ -16,8 +16,15 @@ from .ratelimit import init_app as _init_rate_limiter
 load_dotenv()  # load backend/.env if present
 
 # Allowed browser origins for CORS. "*" is fine for local dev (we use bearer
-# tokens, not cookies). Set CORS_ORIGINS to a comma-separated list in prod.
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
+# tokens, not cookies) but in production this is a comma-separated allow-list:
+# only those origins get an Access-Control-Allow-Origin echo back, so random
+# websites cannot call the API from a visitor's browser.
+#   CORS_ORIGINS=https://mobileapp.unonomercysound.online,http://192.168.1.120:9999
+CORS_ORIGINS = {
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "*").split(",")
+    if origin.strip()
+} or {"*"}
 
 
 def create_app():
@@ -26,6 +33,17 @@ def create_app():
     # Attach per-endpoint rate limiting (a no-op if Flask-Limiter is absent or
     # RATE_LIMIT_ENABLED=0).
     _init_rate_limiter(app)
+
+    # Never stay silent about the insecure default signing key — it appears in
+    # docker-compose.yml, so anyone who reads it could forge admin tokens.
+    from .config import Config
+
+    if Config.JWT_SECRET == "dev-secret-change-me":
+        app.logger.warning(
+            "SECURITY: JWT_SECRET is still the docker-compose default "
+            "('dev-secret-change-me'); set a random JWT_SECRET in .env or "
+            "login tokens can be forged."
+        )
 
     # Auto-register every blueprint in app/routes/*: each module exposes a
     # module-level `bp`. Adding a new route file needs no edit here, which
@@ -40,16 +58,38 @@ def create_app():
         if bp is not None:
             app.register_blueprint(bp)
 
-    # ---- CORS: let the Flutter web build (and any browser) call the API ----
+    # ---- CORS + security headers on every response ----
     @app.after_request
-    def add_cors_headers(resp):
+    def add_security_headers(resp):
         origin = request.headers.get("Origin")
-        allow = CORS_ORIGINS if CORS_ORIGINS != "*" else (origin or "*")
-        resp.headers["Access-Control-Allow-Origin"] = allow
-        resp.headers["Vary"] = "Origin"
-        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-        resp.headers["Access-Control-Allow-Methods"] = \
-            "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        if "*" in CORS_ORIGINS:
+            allow = origin or "*"
+        elif origin and origin in CORS_ORIGINS:
+            allow = origin
+        else:
+            # Origin outside the allow-list (or a non-browser client): send no
+            # ACAO header at all, so the browser refuses the cross-origin read.
+            allow = None
+
+        if allow:
+            resp.headers["Access-Control-Allow-Origin"] = allow
+            resp.headers["Vary"] = "Origin"
+            resp.headers["Access-Control-Allow-Headers"] = \
+                "Content-Type, Authorization"
+            resp.headers["Access-Control-Allow-Methods"] = \
+                "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+
+        # Hardening: never MIME-sniff responses, never allow framing (anti
+        # clickjacking), never leak the referrer.
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("X-Frame-Options", "DENY")
+        resp.headers.setdefault("Referrer-Policy", "no-referrer")
+        # HSTS only counts over HTTPS (the Cloudflare tunnel); browsers ignore
+        # it on plain-HTTP LAN access, so sending it there is harmless.
+        if request.is_secure or request.headers.get("X-Forwarded-Proto") == "https":
+            resp.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
         return resp
 
     # Answer CORS preflight for any path.
@@ -69,5 +109,12 @@ def create_app():
     @app.errorhandler(404)
     def not_found(_):
         return jsonify({"error": "Not found"}), 404
+
+    # Answer a server fault with plain JSON — never an HTML stack trace or
+    # internal detail. Flask and gunicorn already log the full traceback
+    # server-side; here we only shape what the client is allowed to see.
+    @app.errorhandler(500)
+    def internal_error(_err):
+        return jsonify({"error": "Internal server error"}), 500
 
     return app
