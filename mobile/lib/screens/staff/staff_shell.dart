@@ -4,12 +4,14 @@ import 'package:provider/provider.dart';
 import '../../state/auth_state.dart';
 import '../../widgets/shell_app_bar.dart';
 import 'ask_screen.dart';
+import 'shift_screen.dart';
 import 'staff_history_screen.dart';
 import 'staff_orders_screen.dart';
 import 'tables_grid_screen.dart';
 
 /// Staff container: pick a table to take an order, view the shared order
-/// queue, or browse this staff member's own order history.
+/// queue, browse this staff member's own order history, or clock the shift
+/// in/out (see [ShiftScreen]).
 class StaffShell extends StatefulWidget {
   const StaffShell({super.key});
 
@@ -19,11 +21,12 @@ class StaffShell extends StatefulWidget {
 
 class _StaffShellState extends State<StaffShell> {
   int _index = 0;
-  static const _titles = ['Tables', 'Order Queue', 'History'];
+  static const _titles = ['Tables', 'Order Queue', 'History', 'Shift'];
   final _pages = const [
     TablesGridScreen(),
     StaffOrdersScreen(),
     StaffHistoryScreen(),
+    ShiftScreen(),
   ];
 
   @override
@@ -56,6 +59,10 @@ class _StaffShellState extends State<StaffShell> {
               icon: Icon(Icons.history_outlined),
               selectedIcon: Icon(Icons.history),
               label: 'History'),
+          NavigationDestination(
+              icon: Icon(Icons.access_time_outlined),
+              selectedIcon: Icon(Icons.access_time),
+              label: 'Shift'),
         ],
       ),
     );

@@ -116,6 +116,21 @@ def ensure_inventory_table(slug=None):
     _wait_active(name)
 
 
+def ensure_attendance_table(slug=None):
+    """Staff attendance (clock in / clock out). PK is the composite string
+    ``{username}#{YYYY-MM-DD}`` so every member gets one record per day."""
+    name = tenancy.tenant_table_name(Config.ATTENDANCE_TABLE, slug)
+    if _table_exists(name):
+        return
+    dynamodb_client().create_table(
+        TableName=name,
+        BillingMode="PAY_PER_REQUEST",
+        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
+    )
+    _wait_active(name)
+
+
 def ensure_tenants_table():
     """GLOBAL tenant registry (`cafe_tenants`, PK slug) — never prefixed."""
     name = Config.TENANTS_TABLE
@@ -182,6 +197,7 @@ def ensure_infra(slug=None):
         ensure_staff_table(slug)
         ensure_tables_table(slug)
         ensure_inventory_table(slug)
+        ensure_attendance_table(slug)
         # Create the default set of tables on first boot (per tenant).
         tables_repo.ensure_default()
 

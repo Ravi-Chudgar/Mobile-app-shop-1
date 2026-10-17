@@ -64,7 +64,13 @@ class ApiClient {
       };
 
   dynamic _decode(http.Response res) {
-    final body = res.body.isEmpty ? null : jsonDecode(res.body);
+    // Decode the raw bytes as UTF-8 explicitly: Flask answers
+    // `application/json` with no charset, and the http package would then
+    // fall back to latin1 — which garbles any non-ASCII character (é, ₹, —)
+    // in messages or menu names.
+    final body = res.bodyBytes.isEmpty
+        ? null
+        : jsonDecode(utf8.decode(res.bodyBytes));
     if (res.statusCode >= 200 && res.statusCode < 300) return body;
     final msg = (body is Map && body['error'] != null)
         ? body['error'] as String
@@ -119,6 +125,31 @@ class ApiClient {
   Future<void> register(String username, String password, String name) async {
     await _send('POST', '/auth/register',
         {'username': username, 'password': password, 'name': name});
+  }
+
+  // ---- Attendance (staff clock in / clock out) ----
+  /// Today's attendance record for the signed-in member, or null when they
+  /// have not clocked in yet.
+  Future<Map<String, dynamic>?> attendanceMe() async {
+    final data = await _get('/attendance/me') as Map<String, dynamic>;
+    return data['record'] as Map<String, dynamic>?;
+  }
+
+  /// Start today's shift. Throws [ApiException] with status 409 when one
+  /// already exists — the server treats a recorded clock-in as immutable.
+  Future<Map<String, dynamic>> clockIn() async {
+    final data =
+        await _send('POST', '/attendance/clock-in', <String, dynamic>{})
+            as Map<String, dynamic>;
+    return data['record'] as Map<String, dynamic>;
+  }
+
+  /// End today's shift. 400 when there is no clock-in, 409 when already out.
+  Future<Map<String, dynamic>> clockOut() async {
+    final data =
+        await _send('POST', '/attendance/clock-out', <String, dynamic>{})
+            as Map<String, dynamic>;
+    return data['record'] as Map<String, dynamic>;
   }
 
   // ---- Menu (read is open) ----

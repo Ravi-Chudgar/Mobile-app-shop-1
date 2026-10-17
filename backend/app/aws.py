@@ -56,6 +56,10 @@ def inventory_table():
     return dynamodb().Table(tenancy.tenant_table_name(Config.INVENTORY_TABLE))
 
 
+def attendance_table():
+    return dynamodb().Table(tenancy.tenant_table_name(Config.ATTENDANCE_TABLE))
+
+
 def loyalty_table_name():
     """Physical name of the current tenant's loyalty table (the repository
     creates it lazily, so infra needs the name too)."""

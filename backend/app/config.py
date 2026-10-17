@@ -22,11 +22,17 @@ class Config:
     STAFF_TABLE = os.getenv("STAFF_TABLE", "staff")
     TABLES_TABLE = os.getenv("TABLES_TABLE", "cafe_tables")
     INVENTORY_TABLE = os.getenv("INVENTORY_TABLE", "inventory_items")
+    # Staff clock in / clock out — one immutable record per member per day.
+    ATTENDANCE_TABLE = os.getenv("ATTENDANCE_TABLE", "attendance")
     ORDER_DATE_INDEX = os.getenv("ORDER_DATE_INDEX", "order_date-index")
     IMAGES_BUCKET = os.getenv("IMAGES_BUCKET", "cafe-menu-images")
 
     JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
     JWT_TTL_HOURS = int(os.getenv("JWT_TTL_HOURS", "12"))
+
+    # IANA timezone the cafe's business day runs on (attendance shift dates
+    # and the local HH:MM stamps staff see).
+    BUSINESS_TZ = os.getenv("BUSINESS_TZ", "Asia/Kolkata")
 
     # --- Platform admin (sees & controls ALL cafes; see auth.py) ---
     # A separate login that owns no cafe. Disabled while the password is empty

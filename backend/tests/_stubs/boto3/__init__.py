@@ -24,8 +24,17 @@ class _Table:
     def _pk(self, item):
         return item[self._t()["hash_key"]]
 
-    def put_item(self, Item):
-        self._t()["items"][self._pk(Item)] = dict(Item)
+    def put_item(self, Item, ConditionExpression=None, **kw):
+        # Mirrors DynamoDB: the condition is evaluated against the STORED
+        # item (an empty view when no item exists yet), and a failure raises
+        # ConditionalCheckFailedException without writing anything.
+        pk = self._pk(Item)
+        if ConditionExpression is not None:
+            current = self._t()["items"].get(pk)
+            if not ConditionExpression.matches(current or {}):
+                raise ClientError("ConditionalCheckFailedException",
+                                  "condition did not hold")
+        self._t()["items"][pk] = dict(Item)
         return {}
 
     def get_item(self, Key):
